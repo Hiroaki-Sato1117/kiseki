@@ -1,0 +1,17 @@
+{
+  "name": "KISEKI — 最後の習慣化アプリ",
+  "short_name": "KISEKI",
+  "description": "毎日の積み重ねを、軌跡に。習慣トラッカー KISEKI",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0f5f0",
+  "theme_color": "#166534",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

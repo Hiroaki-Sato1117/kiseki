@@ -799,18 +799,19 @@ function hasMarks(data){
   if(!data||typeof data!=='object')return false;
   return Object.values(data).some(md=>md&&md.marks&&Object.keys(md.marks).length>0);
 }
-function save(){
+function save(system){
   const json=JSON.stringify(D);
-  dataUpdatedAt=Date.now();
   // localStorage backup with rotation
   try{
     const old=localStorage.getItem('dt8');
     if(old&&hasMarks(JSON.parse(old)))localStorage.setItem('dt8_bak',old);
     localStorage.setItem('dt8',json);
-    localStorage.setItem('dt_upd',String(dataUpdatedAt));
   }catch(e){}
   // IndexedDB primary
   saveIDB(D).catch(e=>console.error('IDB save error',e));
+  if(system)return; // app-internal persistence: keep timestamp & cloud untouched
+  dataUpdatedAt=Date.now();
+  try{localStorage.setItem('dt_upd',String(dataUpdatedAt));}catch(e){}
   shSv();
   scheduleCloudPush();
 }
@@ -953,6 +954,17 @@ function cloudBtnClick(){
 }
 function oCloseCloud(e){const p=document.getElementById('cloudPop');if(p&&!p.contains(e.target))cCloudPop();}
 function cCloudPop(){const p=document.getElementById('cloudPop');if(p)p.remove();document.removeEventListener('click',oCloseCloud);}
+// Re-pull from cloud when the app returns to the foreground or the network comes back
+// (mobile browsers suspend realtime listeners while backgrounded)
+function cloudRefresh(){
+  if(!window.CLOUD||!CLOUD.enabled||!CLOUD.user)return;
+  CLOUD.load().then(remote=>{
+    if(remote&&remote.updatedAt>dataUpdatedAt&&remote.data)adoptRemote(remote);
+  }).catch(()=>{});
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudRefresh();});
+window.addEventListener('online',cloudRefresh);
+window.addEventListener('focus',cloudRefresh);
 
 // ============================================================
 // Task lifecycle (periods, active check, delete/restore)
@@ -990,7 +1002,7 @@ function iM(k){
     }));
   }
   if(!p)p=DT.map(n=>({name:n,periods:[{from:1,to:null}],history:[]}));
-  D[k]={tasks:p,marks:{}};save();
+  D[k]={tasks:p,marks:{}};save(true);
 }
 
 function syncToFuture(k,action,opts){
@@ -1994,7 +2006,7 @@ for(let mi=0;mi<MS.length-1;mi++){
     })),marks:{}};
   }
 }
-save();
+save(true);
 
 const now=new Date();
 let dk=null;

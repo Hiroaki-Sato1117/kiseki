@@ -30,3 +30,28 @@ python3 -m http.server 8000
 ```
 
 `index.html` を直接開いても動作します(Service Workerのみ無効)。
+
+## クラウド同期(Firebase)のセットアップ
+
+ログインすると記録がFirestoreに保存され、端末をまたいで同期されます。設定しない場合はローカル保存のみで動作します。
+
+1. [Firebaseコンソール](https://console.firebase.google.com/) で対象プロジェクトを開く
+2. **Authentication → Sign-in method → Google** を有効化
+3. **Authentication → Settings → 承認済みドメイン** に `hiroaki-sato1117.github.io` を追加
+4. **Firestore Database → データベースを作成**(本番モード)し、「ルール」タブに以下を貼り付けて公開:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+```
+
+5. **プロジェクトの設定 → マイアプリ(Web)→ SDK設定と構成** の `firebaseConfig` の値を `index.html` 冒頭の `window.FIREBASE_CONFIG` に貼り付け
+6. commit & push
+
+データは `users/{あなたのUID}/tracker/main` に保存され、本人以外は読み書きできません。

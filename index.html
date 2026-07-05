@@ -13,6 +13,22 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="KISEKI">
 <meta name="description" content="KISEKI — 最後の習慣化アプリ。毎日の積み重ねを、軌跡に。">
+<script>
+// ============================================================
+// ▼ クラウド同期の設定(Firebase)
+// Firebaseコンソール → プロジェクトの設定 → マイアプリ(Web) → SDK設定と構成
+// に表示される firebaseConfig の中身をここに貼り付けてください。
+// 貼り付けなければ、従来どおりローカル保存のみで動作します。
+// ============================================================
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD6w7Y8tdF2P11yvXwZZEVYD0M_LfFiatI",
+  authDomain: "daily-tracker-4cc2b.firebaseapp.com",
+  projectId: "daily-tracker-4cc2b",
+  storageBucket: "daily-tracker-4cc2b.firebasestorage.app",
+  messagingSenderId: "333142166065",
+  appId: "1:333142166065:web:016c0656105440fd8c6310"
+};
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 :root,[data-theme="light"]{
@@ -442,6 +458,42 @@ button,.dtab,.ntab,.tbtn,.kbtn,td.cc,.qp-mk,.qp-head,.jt,.bnav button{touch-acti
 .acc-dot{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;transition:transform .15s,border-color .15s;box-shadow:0 1px 4px rgba(0,0,0,.2);}
 .acc-dot:hover{transform:scale(1.15);}
 .acc-dot.on{border-color:var(--text);transform:scale(1.1);}
+/* ===== Visual polish pass ===== */
+/* Gradient stat numbers */
+.dsv,.td-pv,.sn,.fb-st-val,.fb-pct{background:linear-gradient(135deg,var(--accent) 15%,var(--accent2) 90%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+/* Glowing progress rings */
+.td-ring-prog,.ring-fg{filter:drop-shadow(0 0 5px color-mix(in srgb,var(--accent) 50%,transparent));}
+.pie-wrap .pie-arc{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--accent) 40%,transparent));}
+/* Nav: gradient hairline + glowing logo */
+.nav::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent 5%,rgba(255,255,255,.4),transparent 95%);pointer-events:none;}
+.nav-logo{animation:navspark 4s ease-in-out infinite;}
+@keyframes navspark{0%,100%{filter:drop-shadow(0 0 2px rgba(255,255,255,.15));}50%{filter:drop-shadow(0 0 7px rgba(255,255,255,.55));}}
+.brand-txt{text-shadow:0 0 14px rgba(255,255,255,.3);}
+/* Month tab: gradient active pill */
+.dtab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent;box-shadow:0 3px 10px color-mix(in srgb,var(--accent) 40%,transparent);}
+[data-theme="dark"] .dtab.active{color:#0c1a0c;}
+/* Footer buttons: lift on hover */
+.ftr button:hover{transform:translateY(-1px);box-shadow:var(--shadow);}
+/* Cards: subtle top sheen */
+.ds,.dc,.qp,.fb{position:relative;}
+.ds::before,.qp::before,.fb::before{content:'';position:absolute;top:0;left:8%;right:8%;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 35%,transparent),transparent);pointer-events:none;}
+/* ===== Sync status pill ===== */
+.sync-pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;letter-spacing:.3px;}
+.sync-pill .sp-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.sync-pill.sp-local{color:var(--text4);background:var(--naBg);}
+.sync-pill.sp-ok{color:var(--accent);background:var(--accentLight);}
+.sync-pill.sp-syncing{color:var(--mD);background:var(--mDb);}
+.sync-pill.sp-syncing .sp-dot{animation:spPulse 1s ease-in-out infinite;}
+.sync-pill.sp-err{color:var(--red);background:var(--mZb);}
+@keyframes spPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+/* Cloud button signed-in indicator */
+#cloudBtn{position:relative;}
+#cloudBtn.cloud-on::after{content:'';position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#4ade80;border:1.5px solid var(--navBg);box-shadow:0 0 6px rgba(74,222,128,.8);}
+.cloud-pop{position:fixed;z-index:70;padding:12px 14px;background:var(--surfaceSolid);border:1px solid var(--border2);border-radius:14px;box-shadow:var(--shadow2);animation:fu .18s ease;min-width:180px;}
+.cp-mail{font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;word-break:break-all;}
+.cp-state{font-size:11px;color:var(--text3);margin-bottom:10px;}
+.cp-out{width:100%;font-family:inherit;font-size:11px;font-weight:700;padding:7px;border-radius:8px;border:1px solid var(--border2);background:var(--naBg);color:var(--red);cursor:pointer;transition:all .15s;}
+.cp-out:hover{background:var(--mZb);border-color:var(--red);}
 /* Respect reduced motion preference */
 @media(prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}
@@ -463,6 +515,9 @@ button,.dtab,.ntab,.tbtn,.kbtn,td.cc,.qp-mk,.qp-head,.jt,.bnav button{touch-acti
   </div>
   <div class="nav-scroll" id="nv"></div>
   <div class="nav-right">
+    <button class="tbtn" id="cloudBtn" onclick="cloudBtnClick()" style="display:none" title="クラウド同期">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .42-8.98 6 6 0 0 0-11.7 1.62A4 4 0 0 0 7 19z"/></svg>
+    </button>
     <button class="tbtn" id="accBtn" onclick="tAccPop()" title="Accent color">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21a9 9 0 1 1 9-9c0 2-1.5 3-3 3h-2.2c-1.5 0-2.3 1.6-1.4 2.8.9 1.2.2 3.2-2.4 3.2z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.6" r="1.2" fill="currentColor" stroke="none"/></svg>
     </button>
@@ -646,15 +701,18 @@ function hasMarks(data){
 }
 function save(){
   const json=JSON.stringify(D);
+  dataUpdatedAt=Date.now();
   // localStorage backup with rotation
   try{
     const old=localStorage.getItem('dt8');
     if(old&&hasMarks(JSON.parse(old)))localStorage.setItem('dt8_bak',old);
     localStorage.setItem('dt8',json);
+    localStorage.setItem('dt_upd',String(dataUpdatedAt));
   }catch(e){}
   // IndexedDB primary
   saveIDB(D).catch(e=>console.error('IDB save error',e));
   shSv();
+  scheduleCloudPush();
 }
 async function load(){
   // Try IndexedDB first
@@ -708,6 +766,93 @@ function importData(){
   inp.click();
 }
 function shSv(){const e=document.getElementById('si');if(!e)return;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1200);}
+
+// ============================================================
+// Cloud sync (Firestore) — hooks called by the cloud module
+// ============================================================
+let dataUpdatedAt=(()=>{try{return parseInt(localStorage.getItem('dt_upd'))||0;}catch(e){return 0;}})();
+let cloudPushTm=null,syncState='local';
+function setSync(s){
+  syncState=s;
+  const pill=document.getElementById('syncPill');
+  if(pill){
+    const map={local:['sp-local','ローカル保存'],syncing:['sp-syncing','同期中…'],ok:['sp-ok','クラウド同期済み'],err:['sp-err','同期エラー']};
+    const[cls,txt]=map[s]||map.local;
+    pill.className='sync-pill '+cls;
+    pill.innerHTML=`<span class="sp-dot"></span>${txt}`;
+  }
+  const btn=document.getElementById('cloudBtn');
+  if(btn)btn.classList.toggle('cloud-on',!!(window.CLOUD&&CLOUD.user));
+}
+function scheduleCloudPush(){
+  if(!window.CLOUD||!CLOUD.enabled||!CLOUD.user)return;
+  clearTimeout(cloudPushTm);
+  setSync('syncing');
+  cloudPushTm=setTimeout(cloudPush,1200);
+}
+function cloudPush(){
+  if(!window.CLOUD||!CLOUD.enabled||!CLOUD.user)return;
+  CLOUD.save(JSON.stringify(D),dataUpdatedAt).then(()=>setSync('ok')).catch(e=>{console.error('cloud push',e);setSync('err');});
+}
+function adoptRemote(remote){
+  try{
+    const parsed=JSON.parse(remote.data);
+    if(!parsed||typeof parsed!=='object')return;
+    D=parsed;dataUpdatedAt=remote.updatedAt||Date.now();
+    try{localStorage.setItem('dt8',remote.data);localStorage.setItem('dt_upd',String(dataUpdatedAt));}catch(e){}
+    saveIDB(D).catch(()=>{});
+    MS=buildMS(D);
+    const now=new Date(),ck=K(now.getFullYear(),now.getMonth()+1);
+    if(!curMonth||!MS.some(({y,m})=>K(y,m)===ck&&K(y,m)===curMonth))curMonth=curMonth&&MS.some(({y,m})=>K(y,m)===curMonth)?curMonth:ck;
+    iM(curMonth);
+    if(cv==='dashboard')rDash();else rMo(curMonth);
+    setSync('ok');
+  }catch(e){console.error('adoptRemote',e);}
+}
+window.onCloudAuth=async function(u){
+  if(!window.__appReady){setTimeout(()=>window.onCloudAuth(u),300);return;}
+  updateCloudBtn();
+  if(!u){if(window.CLOUD&&CLOUD.unsubscribe)CLOUD.unsubscribe();setSync('local');return;}
+  setSync('syncing');
+  try{
+    const remote=await CLOUD.load();
+    if(remote&&remote.updatedAt>dataUpdatedAt&&remote.data){
+      // Remote is newer → adopt (unless it would wipe real local marks with empty data)
+      let rp=null;try{rp=JSON.parse(remote.data);}catch(e){}
+      if(rp&&(hasMarks(rp)||!hasMarks(D)))adoptRemote(remote);else cloudPush();
+    }else{
+      cloudPush();
+    }
+    CLOUD.subscribe(data=>{if(data.updatedAt>dataUpdatedAt)adoptRemote(data);});
+  }catch(e){console.error('cloud init',e);setSync('err');}
+};
+function updateCloudBtn(){
+  const btn=document.getElementById('cloudBtn');if(!btn)return;
+  if(!window.CLOUD||!CLOUD.enabled){btn.style.display='none';return;}
+  btn.style.display='';
+  btn.classList.toggle('cloud-on',!!CLOUD.user);
+  btn.title=CLOUD.user?(CLOUD.user.email||'ログイン中'):'Googleでログインしてクラウド同期';
+}
+function cloudBtnClick(){
+  if(!window.CLOUD||!CLOUD.enabled)return;
+  if(!CLOUD.user){
+    CLOUD.signIn().catch(e=>{if(e&&e.code!=='auth/popup-closed-by-user')alert('ログインに失敗しました: '+(e.message||e));});
+    return;
+  }
+  const ex=document.getElementById('cloudPop');if(ex){cCloudPop();return;}
+  const pop=document.createElement('div');pop.id='cloudPop';pop.className='cloud-pop';
+  pop.innerHTML=`<div class="cp-mail">${esc(CLOUD.user.email||'')}</div>
+  <div class="cp-state">${syncState==='ok'?'✓ クラウド同期済み':syncState==='syncing'?'同期中…':syncState==='err'?'⚠ 同期エラー':''}</div>
+  <button class="cp-out" id="cpOut">ログアウト</button>`;
+  document.body.appendChild(pop);
+  document.getElementById('cpOut').onclick=e=>{e.stopPropagation();CLOUD.signOut();cCloudPop();};
+  const btn=document.getElementById('cloudBtn'),r=btn.getBoundingClientRect(),pr=pop.getBoundingClientRect();
+  pop.style.top=(r.bottom+8)+'px';
+  pop.style.left=Math.max(8,Math.min(r.left+r.width/2-pr.width/2,innerWidth-pr.width-8))+'px';
+  setTimeout(()=>document.addEventListener('click',oCloseCloud),0);
+}
+function oCloseCloud(e){const p=document.getElementById('cloudPop');if(p&&!p.contains(e.target))cCloudPop();}
+function cCloudPop(){const p=document.getElementById('cloudPop');if(p)p.remove();document.removeEventListener('click',oCloseCloud);}
 
 // ============================================================
 // Task lifecycle (periods, active check, delete/restore)
@@ -1037,7 +1182,7 @@ h+=`<div class="cs">
     <div class="cc-wrap" id="c_${k}"></div>
   </div>
 </div>`;
-h+=`<div class="ftr"><button onclick="exC('${k}')">Export CSV</button><button onclick="exportData()">Backup JSON</button><button onclick="importData()">Restore JSON</button><span class="si" id="si">✓ Saved</span><span class="ht">Click=select · Click again / Dbl / Hold=menu · Enter=menu</span><span class="ht-touch">Tap=select · Tap again / Hold=menu</span></div></div>`;
+h+=`<div class="ftr"><button onclick="exC('${k}')">Export CSV</button><button onclick="exportData()">Backup JSON</button><button onclick="importData()">Restore JSON</button><span class="si" id="si">✓ Saved</span><span class="sync-pill" id="syncPill"></span><span class="ht">Click=select · Click again / Dbl / Hold=menu · Enter=menu</span><span class="ht-touch">Tap=select · Tap again / Hold=menu</span></div></div>`;
 
 document.getElementById('mV').innerHTML=h;
 // Scroll month tabs so current month is ~4th from left
@@ -1046,6 +1191,7 @@ if(!scrollState&&moTabsEl){const curBtn=moTabsEl.querySelector('.dtab.cur');if(c
 const els=[document.getElementById('h_'+k),document.getElementById('b_'+k),document.getElementById('s_'+k)];
 let sy=false;els.forEach(el=>{if(!el)return;el.addEventListener('scroll',()=>{if(sy)return;sy=true;els.forEach(o=>{if(o&&o!==el)o.scrollLeft=el.scrollLeft;});sy=false;updateJT(k);});});
 requestAnimationFrame(()=>updateJT(k));
+setSync(syncState);
 const bEl=document.getElementById('b_'+k);if(bEl)setupCE(bEl,k);
 setupColResize(k);
 // Auto-scroll so today's column is visible just right of the sticky task column (fresh render only)
@@ -1744,6 +1890,9 @@ if(!dk){
 curMonth=dk;
 try{const st=localStorage.getItem('tab8');if(st==='dashboard'||st==='tasks')cv=st;else cv='tasks';}catch(e){cv='tasks';}
 rNav();sw(cv);setTimeout(initSel,100);window.scrollTo(0,0);
+window.__appReady=true;
+updateCloudBtn();
+setSync(window.CLOUD&&CLOUD.user?'syncing':'local');
 }
 initApp();
 addEventListener('resize',()=>{rC();if(cv==='tasks'&&curMonth)drCh(curMonth,gS(curMonth));});
@@ -2210,6 +2359,43 @@ async function loadAiComment(){
       el.style.color='var(--red)';
     }
   }
+}
+</script>
+<script type="module">
+// ============================================================
+// Cloud sync module (Firebase Auth + Firestore)
+// Loads only when FIREBASE_CONFIG is filled in. The app works
+// fully offline/local without it.
+// ============================================================
+const cfg = window.FIREBASE_CONFIG;
+if (cfg && cfg.apiKey && !String(cfg.apiKey).includes('PASTE')) {
+  try {
+    const [{ initializeApp }, authMod, fsMod] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js')
+    ]);
+    const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
+    const { getFirestore, doc, getDoc, setDoc, onSnapshot } = fsMod;
+    const app = initializeApp(cfg);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const userDoc = () => doc(db, 'users', auth.currentUser.uid, 'tracker', 'main');
+    let unsub = null;
+    window.CLOUD = {
+      enabled: true,
+      user: null,
+      signIn: () => signInWithPopup(auth, new GoogleAuthProvider()),
+      signOut: () => signOut(auth),
+      save: (json, updatedAt) => setDoc(userDoc(), { data: json, updatedAt }),
+      load: async () => { const s = await getDoc(userDoc()); return s.exists() ? s.data() : null; },
+      subscribe: (cb) => { if (unsub) unsub(); unsub = onSnapshot(userDoc(), s => { if (s.exists() && !s.metadata.hasPendingWrites) cb(s.data()); }); },
+      unsubscribe: () => { if (unsub) { unsub(); unsub = null; } }
+    };
+    onAuthStateChanged(auth, u => { window.CLOUD.user = u; if (window.onCloudAuth) window.onCloudAuth(u); });
+  } catch (e) { console.warn('Cloud sync unavailable:', e); window.CLOUD = { enabled: false }; if (window.onCloudAuth) window.onCloudAuth(null); }
+} else {
+  window.CLOUD = { enabled: false };
 }
 </script>
 </body>

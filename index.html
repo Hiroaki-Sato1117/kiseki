@@ -480,6 +480,13 @@ color:var(--mS);opacity:.3;font-weight:800;pointer-events:none;}
 .qp-mk.on-h{background:var(--mHb);border-color:var(--mH);color:var(--mH);}
 .qp-mk.on-z{background:var(--mZb);border-color:var(--mZ);color:var(--mZ);}
 .qp-all{padding:10px 4px 4px;text-align:center;font-size:13px;font-weight:600;color:var(--accent);}
+.qp-add{display:flex;gap:8px;padding:10px 4px 4px;border-top:1px solid var(--border);margin-top:4px;grid-column:1/-1;}
+.qp-add-in{flex:1;min-width:0;font-family:inherit;font-size:13px;padding:8px 12px;border-radius:10px;border:1px solid var(--border2);background:var(--naBg);color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;}
+.qp-add-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accentLight);}
+.qp-add-in::placeholder{color:var(--text4);}
+.qp-add-btn{width:36px;height:36px;flex-shrink:0;border-radius:10px;border:1px solid var(--border2);background:var(--accentLight);color:var(--accent);font-size:18px;font-weight:800;cursor:pointer;font-family:inherit;transition:all .15s;}
+.qp-add-btn:hover{background:var(--accent);color:#fff;transform:translateY(-1px);box-shadow:0 0 12px color-mix(in srgb,var(--accent) 45%,transparent);}
+.qp-add-btn:active{transform:scale(.92);}
 /* ===== Jump to Today ===== */
 .jt{position:fixed;right:16px;bottom:16px;z-index:40;display:none;align-items:center;gap:6px;padding:9px 16px;border-radius:99px;border:none;background:var(--accent);color:#fff;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.3px;cursor:pointer;box-shadow:var(--shadow2);transition:transform .15s;}
 .jt.show{display:flex;animation:fu .25s ease;}
@@ -686,6 +693,13 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 /* Respect reduced motion preference */
 @media(prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}
+}
+/* ===== Cascade-order fixes & touch UX (must stay last) ===== */
+@media(max-width:640px){
+.bnav{display:grid;}
+:root,[data-theme="light"],[data-theme="dark"]{--colDay:40px;}
+td.cc{height:42px;}
+.mdd button{width:42px;height:42px;font-size:18px;}
 }
 </style>
 </head>
@@ -1282,18 +1296,18 @@ h+=`<div class="hero">
       <circle class="hero-track" cx="60" cy="60" r="${hR}"/>
       <circle class="hero-prog td-ring-prog" cx="60" cy="60" r="${hR}" stroke-dasharray="${hC}" stroke-dashoffset="${hC}" data-final="${hOff}"/>
     </svg>
-    <div class="hero-pct"><b class="anim-v" data-anim="${tod.pct}" data-suffix="%">0%</b><s>TODAY</s></div>
+    <div class="hero-pct"><b class="anim-v" data-anim="${tod.pct}" data-suffix="%" data-delay="80">0%</b><s>TODAY</s></div>
   </div>
   <div class="hero-info">
     <div class="hero-date">${MN[m]} ${tod.day}, ${y}<span>${wdName}</span></div>
     <div class="hero-nums">
-      <div class="hn"><b class="anim-v" data-anim="${tScore}" data-dec="1">0</b><s>score</s></div>
-      <div class="hn"><b class="anim-v" data-anim="${tod.marked}" data-suffix="/${tod.total}">0/${tod.total}</b><s>done</s></div>
+      <div class="hn"><b class="anim-v" data-anim="${tScore}" data-dec="1" data-delay="220">0</b><s>score</s></div>
+      <div class="hn"><b class="anim-v" data-anim="${tod.marked}" data-suffix="/${tod.total}" data-delay="340">0/${tod.total}</b><s>done</s></div>
       ${wd!==null?`<div class="hn diff ${wd>0?'up':wd<0?'down':'flat'}"><b>${wd>0?'↑+'+wd:wd<0?'↓'+wd:'→0'}%</b><s>vs last wk</s></div>`:''}
     </div>
     <div class="hero-quote">"${esc(q[0])}"${q[1]?`<span class="qa2">— ${esc(q[1])}</span>`:''}</div>
   </div>
-  <div class="hero-streak">${flameSvg(str,Math.max(flameSize(str),26)+8)}<b class="anim-v" data-anim="${str}">0</b><s>day streak</s></div>
+  <div class="hero-streak">${flameSvg(str,Math.max(flameSize(str),26)+8)}<b class="anim-v" data-anim="${str}" data-delay="460">0</b><s>day streak</s></div>
 </div>
 <div class="hero-chips">
   <span class="chip">Rate<b>${mRate}%</b></span>
@@ -1320,6 +1334,7 @@ md.tasks.forEach((task,ti)=>{
 });
 if(qpRows===0)h+=`<div class="qp-all">No tasks for today</div>`;
 else if(tod.rem===0)h+=`<div class="qp-all">All tasks marked — great job!</div>`;
+h+=`<div class="qp-add"><input id="qpNewTask" class="qp-add-in" placeholder="新しいタスクを追加..." maxlength="60" onkeydown="if(event.key==='Enter')qpAdd('${k}')"><button class="qp-add-btn" onclick="qpAdd('${k}')" title="Add task">+</button></div>`;
 h+=`</div></div>`;}
 
 const gridOpen=(()=>{try{return localStorage.getItem('dt_grid')!=='0';}catch(e){return true;}})();
@@ -1432,9 +1447,9 @@ checkCeleb(tod);
 if(!scrollState){
 // Animate numbers in Tasks view (only on fresh render, not re-render after edit)
 requestAnimationFrame(()=>{
-document.getElementById('mV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;animateNum(e,t);});
+document.getElementById('mV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
 const ring=document.querySelector('.td-ring-prog');
-if(ring)setTimeout(()=>{ring.style.strokeDashoffset=ring.dataset.final;},50);
+if(ring)setTimeout(()=>{ring.style.strokeDashoffset=ring.dataset.final;},80);
 });
 } else {
 // Instant update on re-render
@@ -1462,8 +1477,8 @@ const{ti,d}=cDt(el);setSel(ti,d);shDD(el);});
 let tS=0,tE=null,tL=null,tF=false;
 c.addEventListener('touchstart',function(e){const el=e.target.closest('td.cc');if(!el||el.classList.contains('na'))return;tS=Date.now();tE=el;tF=false;tL=setTimeout(()=>{tF=true;shDD(el);},LONG_PRESS_MS);},{passive:true});
 c.addEventListener('touchend',function(e){clearTimeout(tL);if(tF||!tE)return;const el=tE;tE=null;if(Date.now()-tS<400){e.preventDefault();const{ti,d}=cDt(el);
-// Tapping the already-selected cell opens the mark picker (avoids the long-press requirement)
-if(ti===selTi&&d===selD&&selEndTi===null&&selEndD===null){shDD(el);}else{setSel(ti,d);}}});
+// One tap = select + open the mark picker right away (fastest path on touch)
+setSel(ti,d);shDD(el);}});
 }
 function cDt(el){return{k:el.dataset.k,ti:+el.dataset.ti,d:+el.dataset.d};}
 function shDD(el){cDD();cPop();const{k,ti,d}=cDt(el);const dd=document.createElement('div');dd.className='mdd';
@@ -1705,6 +1720,17 @@ function anP(){pX.clearRect(0,0,pC.width,pC.height);pts=pts.filter(p=>{p.x+=p.vx
 // Quick Check panel, celebration & jump-to-today
 // ============================================================
 function tQP(){const el=document.getElementById('qp');if(!el)return;el.classList.toggle('open');try{localStorage.setItem('dt_qp',el.classList.contains('open')?'1':'0');}catch(e){}}
+function qpAdd(k){
+  const inp=document.getElementById('qpNewTask');if(!inp)return;
+  const name=inp.value.trim();if(!name)return;
+  const[y,m]=pK(k);const now=new Date();
+  let ad=1;if(now.getFullYear()===y&&now.getMonth()+1===m)ad=now.getDate();
+  D[k].tasks.push({name,periods:[{from:ad,to:null}],history:[]});
+  syncToFuture(k,'add',{name});
+  save();pS('single');
+  scR(k);
+  setTimeout(()=>{const ni=document.getElementById('qpNewTask');if(ni)ni.focus();},200);
+}
 function tGrid(){
   const c=document.querySelector('.mv .card');if(!c)return;
   c.classList.toggle('closed');

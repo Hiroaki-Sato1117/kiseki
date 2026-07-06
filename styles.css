@@ -162,7 +162,11 @@ html{background:var(--bg);}
 .st th:nth-child(2),.st td:nth-child(2){width:var(--colTask);min-width:var(--colTask);max-width:var(--colTask);text-align:left;position:sticky;left:var(--colNum);z-index:2;border-right:2px solid var(--border2);}
 .st th:first-child,.st th:nth-child(2){z-index:4;}
 .st th:nth-child(n+3),.st td:nth-child(n+3){width:var(--colDay);min-width:var(--colDay);max-width:var(--colDay);}
-.ss{overflow-x:auto;scrollbar-width:none;}.ss::-webkit-scrollbar{display:none;}
+.ss{overflow-x:auto;scrollbar-width:none;touch-action:pan-y;}.ss::-webkit-scrollbar{display:none;}
+/* Sticky columns must be opaque or scrolled cells show through */
+.bw td:first-child,.bw td:nth-child(2),.sw td:first-child,.sw td:nth-child(2){background:var(--surfaceSolid);}
+.bw tr.sel-row>td:first-child,.bw tr.sel-row>td:nth-child(2){background:color-mix(in srgb,var(--accent) 10%,var(--surfaceSolid));}
+.bw tr:hover>td:first-child,.bw tr:hover>td:nth-child(2){background:color-mix(in srgb,var(--accent) 5%,var(--surfaceSolid));}
 
 .hw thead th{background:var(--green800);color:white;font-weight:600;font-size:10px;padding:7px 0;white-space:nowrap;}
 [data-theme="dark"] .hw thead th{background:var(--surfaceSolid);color:var(--text);}
@@ -708,10 +712,6 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 .r-str{display:inline-flex;align-items:center;gap:3px;margin:0 10px;flex-shrink:0;font-family:'JetBrains Mono',monospace;}
 .r-str b{font-size:11.5px;font-weight:800;color:var(--text2);}
 .r-str i{font-style:normal;font-size:9.5px;color:var(--text4);}
-/* ===== AI coach ===== */
-.hero-quote.ai-coach{border-left-color:var(--mD);}
-.coach-chip{display:inline-flex;margin-left:10px;font-family:inherit;font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--mD);background:var(--mDb);border:1px solid color-mix(in srgb,var(--mD) 35%,transparent);border-radius:99px;padding:2px 8px;cursor:pointer;vertical-align:1px;transition:all .15s;}
-.coach-chip:hover{background:var(--mD);color:#1a1206;}
 /* Respect reduced motion preference */
 @media(prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}

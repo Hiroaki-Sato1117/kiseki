@@ -752,6 +752,7 @@ const moTabsEl=document.getElementById('moTabs');
 if(!scrollState&&moTabsEl){const curBtn=moTabsEl.querySelector('.dtab.cur');if(curBtn){const btns=[...moTabsEl.querySelectorAll('.dtab')];const ci=btns.indexOf(curBtn);const target=Math.max(0,ci-3);if(target>0&&btns[target])moTabsEl.scrollLeft=btns[target].offsetLeft-moTabsEl.offsetLeft-8;}}
 const els=[document.getElementById('h_'+k),document.getElementById('b_'+k),document.getElementById('s_'+k)];
 let sy=false;els.forEach(el=>{if(!el)return;el.addEventListener('scroll',()=>{if(sy)return;sy=true;els.forEach(o=>{if(o&&o!==el)o.scrollLeft=el.scrollLeft;});sy=false;updateJT(k);});});
+els.forEach(el=>setupAxisLock(el));
 requestAnimationFrame(()=>updateJT(k));
 setSync(syncState);
 const bEl=document.getElementById('b_'+k);if(bEl)setupCE(bEl,k);
@@ -785,7 +786,6 @@ requestAnimationFrame(()=>{
 drCh(k,stats);
 checkCeleb(tod);
 checkMilestone();
-loadCoach();
 if(!scrollState){
 // Animate numbers in Tasks view (only on fresh render, not re-render after edit)
 requestAnimationFrame(()=>{
@@ -805,6 +805,47 @@ if(ring)ring.style.strokeDashoffset=ring.dataset.final;
 // ============================================================
 // Cell interaction (click, dblclick, longpress, touch)
 // ============================================================
+// ============================================================
+// Axis-locked touch scrolling for the grid.
+// CSS touch-action:pan-y blocks native horizontal panning; the
+// first ~6px of movement decides the axis, then either the page
+// scrolls vertically (native) or we drive scrollLeft manually
+// with a momentum fling. No more diagonal drift.
+// ============================================================
+function setupAxisLock(el){
+  if(!el)return;
+  let sx=0,sy=0,sl=0,lock=null,lx=0,lt=0,vx=0,flingId=null;
+  el.addEventListener('touchstart',e=>{
+    if(flingId){cancelAnimationFrame(flingId);flingId=null;}
+    const t=e.touches[0];sx=t.clientX;sy=t.clientY;sl=el.scrollLeft;
+    lock=null;vx=0;lx=t.clientX;lt=performance.now();
+    window.__gridLock=null;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    const t=e.touches[0];const dx=t.clientX-sx,dy=t.clientY-sy;
+    if(lock===null){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6)return;
+      lock=Math.abs(dx)>Math.abs(dy)?'x':'y';
+      window.__gridLock=lock; // cell handlers watch this to cancel tap/long-press
+    }
+    if(lock==='x'){
+      e.preventDefault();
+      el.scrollLeft=sl-dx;
+      const now=performance.now(),dt2=now-lt;
+      if(dt2>0)vx=0.8*vx+0.2*((t.clientX-lx)/dt2);
+      lx=t.clientX;lt=now;
+    }
+  },{passive:false});
+  el.addEventListener('touchend',()=>{
+    if(lock==='x'&&Math.abs(vx)>0.15){
+      let v=vx*16;
+      const step=()=>{el.scrollLeft-=v;v*=0.94;if(Math.abs(v)>0.4)flingId=requestAnimationFrame(step);else flingId=null;};
+      flingId=requestAnimationFrame(step);
+    }
+    setTimeout(()=>{window.__gridLock=null;},60);
+    lock=null;
+  });
+}
 let lpT=null,lpF=false;
 function setupCE(c,k){
 c.addEventListener('mousedown',function(e){const el=e.target.closest('td.cc');if(!el||el.classList.contains('na')||e.button!==0)return;lpF=false;lpT=setTimeout(()=>{lpF=true;shDD(el);},LONG_PRESS_MS);});
@@ -818,7 +859,8 @@ const el=e.target.closest('td.cc');if(!el||el.classList.contains('na'))return;
 const{ti,d}=cDt(el);setSel(ti,d);shDD(el);});
 let tS=0,tE=null,tL=null,tF=false;
 c.addEventListener('touchstart',function(e){const el=e.target.closest('td.cc');if(!el||el.classList.contains('na'))return;tS=Date.now();tE=el;tF=false;tL=setTimeout(()=>{tF=true;shDD(el);},LONG_PRESS_MS);},{passive:true});
-c.addEventListener('touchend',function(e){clearTimeout(tL);if(tF||!tE)return;const el=tE;tE=null;if(Date.now()-tS<400){e.preventDefault();const{ti,d}=cDt(el);
+c.addEventListener('touchmove',function(){if(window.__gridLock){clearTimeout(tL);tE=null;tF=false;}},{passive:true});
+c.addEventListener('touchend',function(e){clearTimeout(tL);if(window.__gridLock){tE=null;return;}if(tF||!tE)return;const el=tE;tE=null;if(Date.now()-tS<400){e.preventDefault();const{ti,d}=cDt(el);
 // One tap = select + open the mark picker right away (fastest path on touch)
 setSel(ti,d);shDD(el);}});
 }
@@ -1901,57 +1943,6 @@ function delKey(){
   document.getElementById('keyStatus').innerHTML='<span style="color:var(--text3)">Key deleted</span>';
 }
 document.getElementById('keyMo').addEventListener('click',function(e){if(e.target===this)cKeyMo();});
-
-// ============================================================
-// AI Daily Coach — persona-selectable one-liner in the hero.
-// One API call per day (cached). Falls back to static quote.
-// ============================================================
-const PERSONAS=[
-{id:'kind',label:'優しい先生',prompt:'あなたは優しく寄り添う先生。温かく、決して責めない。'},
-{id:'netsu',label:'熱血コーチ',prompt:'あなたは熱血スポーツコーチ。短く力強く、背中を押す。'},
-{id:'data',label:'アナリスト',prompt:'あなたは冷静なデータアナリスト。数字を根拠に淡々と述べる。'},
-{id:'zen',label:'禅マスター',prompt:'あなたは禅の老師。静かで含蓄のある言葉を使う。'}
-];
-function getPersona(){try{const p=localStorage.getItem('dt_persona');return PERSONAS.find(x=>x.id===p)||PERSONAS[0];}catch(e){return PERSONAS[0];}}
-function cyclePersona(){
-  const cur=getPersona();
-  const next=PERSONAS[(PERSONAS.findIndex(p=>p.id===cur.id)+1)%PERSONAS.length];
-  try{localStorage.setItem('dt_persona',next.id);localStorage.removeItem('dt_coach8');}catch(e){}
-  loadCoach(true);
-}
-async function loadCoach(force){
-  if(!getGKEY())return;
-  const q=document.querySelector('.hero-quote');if(!q)return;
-  const todayStr=new Date().toISOString().slice(0,10);
-  const persona=getPersona();
-  let cached=null;
-  try{cached=JSON.parse(localStorage.getItem('dt_coach8')||'null');}catch(e){}
-  const inject=(text)=>{
-    const el=document.querySelector('.hero-quote');if(!el)return;
-    el.classList.add('ai-coach');
-    el.innerHTML=`${esc(text)}<button class="coach-chip" onclick="cyclePersona()" title="タップで性格を切替">AI · ${getPersona().label}</button>`;
-  };
-  if(!force&&cached&&cached.date===todayStr&&cached.persona===persona.id){inject(cached.text);return;}
-  // Build context
-  const sc=scanStreaks();
-  const now=new Date();const curK=K(now.getFullYear(),now.getMonth()+1);
-  const tod=gTod(curK)||{rem:0,total:0,pct:0};
-  const wds=weekdayStats();
-  const WDJ=['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
-  const weak=wds.worst>=0&&wds.best!==wds.worst?WDJ[wds.worst]:null;
-  const prompt=`${persona.prompt}
-以下は習慣トラッカーの利用者の今日の状況です。この人に向けた今日の一言を日本語で1文、60字以内で。絵文字・記号・引用符は使わない。説教しない。
-- 今日は${WDJ[now.getDay()]}
-- 現在のストリーク: ${sc.current}日
-- 今日の残タスク: ${tod.rem}/${tod.total}
-- 今日の達成率: ${tod.pct}%${weak?`\n- 統計上、${weak}が苦手な傾向`:''}`;
-  try{
-    const text=(await callGem(prompt)).trim().replace(/^["「』『」]+|["「』『」]+$/g,'').slice(0,80);
-    if(!text)return;
-    try{localStorage.setItem('dt_coach8',JSON.stringify({date:todayStr,persona:persona.id,text}));}catch(e){}
-    inject(text);
-  }catch(e){/* keep static quote */}
-}
 
 // --- GEMINI API CALL ---
 async function callGem(prompt){

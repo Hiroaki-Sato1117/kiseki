@@ -408,6 +408,19 @@ function gMk(k,ti,d){const md=D[k];if(!md?.marks?.[ti])return null;return md.mar
 const undoStack=[],redoStack=[];
 let lastMarkCell=null;
 function sMk(k,ti,d,t,noHist){const md=D[k];if(!md.marks)md.marks={};if(!md.marks[ti])md.marks[ti]={};const old=md.marks[ti][d]||null;if(!noHist){undoStack.push({k,ti,d,old,nw:t});redoStack.length=0;}if(t===null)delete md.marks[ti][d];else md.marks[ti][d]=t;if(t)lastMarkCell={k,ti,d,t:Date.now()};save();}
+let _utT=null;
+function showUndoToast(sym){
+  let el=document.getElementById('undoToast');
+  if(!el){
+    el=document.createElement('div');el.id='undoToast';el.className='undo-toast';
+    document.body.appendChild(el);
+  }
+  el.innerHTML=`<span class="ut-msg">${sym?sym+' を記録':'クリアしました'}</span><button class="ut-btn" onclick="undoMk();hideUndoToast();">元に戻す</button>`;
+  el.classList.add('show');
+  clearTimeout(_utT);
+  _utT=setTimeout(hideUndoToast,4000);
+}
+function hideUndoToast(){const el=document.getElementById('undoToast');if(el)el.classList.remove('show');}
 function undoMk(){if(!undoStack.length)return;const a=undoStack.pop();redoStack.push(a);if(a.batch){a.batch.forEach(o=>sMk(o.k,o.ti,o.d,o.old,true));scR(a.batch[0].k);}else{sMk(a.k,a.ti,a.d,a.old,true);scR(a.k);}}
 function redoMk(){if(!redoStack.length)return;const a=redoStack.pop();undoStack.push(a);if(a.batch){a.batch.forEach(o=>sMk(o.k,o.ti,o.d,o.nw,true));scR(a.batch[0].k);}else{sMk(a.k,a.ti,a.d,a.nw,true);scR(a.k);}}
 function mV(t){return t?MK[t].v:0;}
@@ -460,6 +473,47 @@ function dayOK(k,d){
   if(!nonSkip.some(t=>gMk(k,md.tasks.indexOf(t),d)!==null))return false;
   if(nonSkip.every(t=>gMk(k,md.tasks.indexOf(t),d)==='zero'))return false;
   return true;
+}
+// ---- Deep stats: weekday performance & per-task streaks ----
+function weekdayStats(){
+  const acc=Array.from({length:7},()=>({sum:0,n:0}));
+  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  MS.forEach(({y,m})=>{
+    const k=K(y,m);const md=D[k];if(!md)return;
+    const days=dim(y,m);
+    for(let d=1;d<=days;d++){
+      const dt=new Date(y,m-1,d);if(dt>today)break;
+      const act=md.tasks.filter(t=>isA(t,d));if(!act.length)continue;
+      let pts=0,sc=0,any=false;
+      act.forEach(t=>{const mk=gMk(k,md.tasks.indexOf(t),d);if(mk==='skip')return;pts++;sc+=mV(mk);if(mk!==null)any=true;});
+      if(!any||!pts)continue;
+      const wd=dt.getDay();
+      acc[wd].sum+=Math.min(sc/pts,1);acc[wd].n++;
+    }
+  });
+  const out=acc.map(a=>({pct:a.n?Math.round(a.sum/a.n*100):null,n:a.n}));
+  let bi=-1,wi=-1;
+  out.forEach((o,i)=>{if(o.pct===null)return;if(bi<0||o.pct>out[bi].pct)bi=i;if(wi<0||o.pct<out[wi].pct)wi=i;});
+  return{days:out,best:bi,worst:wi};
+}
+function taskStreak(name){
+  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  let cur=0,best=0;
+  if(MS.length){
+    const dt=new Date(MS[0].y,MS[0].m-1,1);
+    for(;dt<=today;dt.setDate(dt.getDate()+1)){
+      const k=K(dt.getFullYear(),dt.getMonth()+1),d=dt.getDate();
+      const md=D[k];const isToday=dt.getTime()===today.getTime();
+      const ti=md?md.tasks.findIndex(t=>t.name===name&&isA(t,d)):-1;
+      if(ti<0){continue;} // task inactive that day — neutral
+      const mk=gMk(k,ti,d);
+      if(mk==='skip')continue; // excused — neutral
+      if(mk==='double'||mk==='single'||mk==='half'){cur++;if(cur>best)best=cur;}
+      else if(isToday&&mk===null){/* pending today */}
+      else cur=0;
+    }
+  }
+  return{cur,best};
 }
 let _scanCache=null,_scanStamp='';
 function scanStreaks(){
@@ -731,6 +785,7 @@ requestAnimationFrame(()=>{
 drCh(k,stats);
 checkCeleb(tod);
 checkMilestone();
+loadCoach();
 if(!scrollState){
 // Animate numbers in Tasks view (only on fresh render, not re-render after edit)
 requestAnimationFrame(()=>{
@@ -772,7 +827,7 @@ function shDD(el){cDD();cPop();const{k,ti,d}=cDt(el);const dd=document.createEle
 [{t:'double',s:'◎',c:'dd-d'},{t:'single',s:'○',c:'dd-s'},{t:'half',s:'△',c:'dd-h'},{t:'zero',s:'×',c:'dd-z'},{t:'skip',s:'–',c:'dd-na'},{t:null,s:'■',c:'dd-c'}].forEach(o=>{
 const b=document.createElement('button');b.className=o.c;b.textContent=o.s;
 b.onmousedown=e=>{e.stopPropagation();e.preventDefault();};
-b.onclick=e=>{e.stopPropagation();sMk(k,ti,d,o.t);if(o.t)pS(o.t);else pS('clear');if(o.t)spP(el,o.t);cDD();scR(k);};
+b.onclick=e=>{e.stopPropagation();sMk(k,ti,d,o.t);if(o.t)pS(o.t);else pS('clear');if(o.t)spP(el,o.t);showUndoToast(o.t?o.s:null);cDD();scR(k);};
 dd.appendChild(b);});
 // Fixed positioning on body: avoids clipping by scroll containers and wrapping inside narrow cells
 document.body.appendChild(dd);
@@ -1039,6 +1094,7 @@ function qpMk(e,k,ti,d,t){
   const nw=cur===t?null:t; // tap same mark again to clear
   sMk(k,ti,d,nw);
   if(nw){pS(nw);spP(e.currentTarget,nw);}else pS('clear');
+  showUndoToast(nw?{double:'◎',single:'○',half:'△',zero:'×'}[nw]:null);
   scR(k);
 }
 function fireConfetti(){
@@ -1256,6 +1312,23 @@ MILESTONES.forEach(n=>{
 });
 h+=`</div></div>`;
 
+// Weekday performance
+const wds=weekdayStats();
+if(wds.best>=0){
+h+=`<div class="dh-section"><div class="dh-title">Weekday Performance</div><div class="wd-wrap"><div class="wd-bars">`;
+const WDN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+wds.days.forEach((o,i)=>{
+  const cls=o.pct===null?'':(i===wds.best?' wd-best':(i===wds.worst&&wds.worst!==wds.best?' wd-worst':''));
+  h+=`<div class="wd-col${cls}"><span class="wd-val">${o.pct===null?'–':o.pct+'%'}</span><div class="wd-bar"><div class="wd-fill" style="height:0%" data-h="${o.pct||0}"></div></div><span class="wd-lbl">${WDN[i]}</span></div>`;
+});
+h+=`</div>`;
+if(wds.best!==wds.worst&&wds.worst>=0){
+  const WDJ=['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
+  h+=`<div class="wd-note">強い曜日は<b>${WDJ[wds.best]}</b>、伸びしろは<b>${WDJ[wds.worst]}</b>です</div>`;
+}
+h+=`</div></div>`;
+}
+
 // AI Reflection card
 h+=`<div class="dc full ai-card" style="margin-bottom:18px">
   <h3>AI Reflection</h3>
@@ -1328,6 +1401,7 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{
 el.querySelectorAll('[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t),dl);});
 // Animate bars
 el.querySelectorAll('.bf[data-w]').forEach(b=>{const dl=(parseInt(b.dataset.idx)||0)*40;setTimeout(()=>{b.style.width=b.dataset.w+'%';},dl);});
+el.querySelectorAll('.wd-fill[data-h]').forEach((b,i)=>{setTimeout(()=>{b.style.height=b.dataset.h+'%';},i*60);});
 // Animate pie charts (SVG ring)
 setTimeout(()=>{el.querySelectorAll('.pie-arc').forEach(arc=>{
   const pct=parseFloat(arc.closest('.pie-wrap').dataset.pct)||0;
@@ -1365,9 +1439,11 @@ function rDashTask(){
     const g=i<3?'g'+(i+1):'';
     const bc=r.pct>=75?'var(--accent)':r.pct>=50?'var(--chartLine)':r.pct>=25?'#f59e0b':'var(--text4)';
     const label=i+1;
+    const ts=taskStreak(r.name);
     h+=`<div class="rr" style="animation-delay:${i*60}ms">
       <div class="rn ${g}">${label}</div>
       <div class="rname">${esc(r.name)}</div>
+      <span class="r-str" title="現在のストリーク / ベスト">${flameSvg(ts.cur,12)}<b>${ts.cur}</b><i>/${ts.best}d</i></span>
       <div class="rm"><div class="rmf" style="width:0%;background:${bc}" data-tw="${r.pct}"></div></div>
       <div class="rp">${r.pct}%</div>
     </div>`;
@@ -1825,6 +1901,57 @@ function delKey(){
   document.getElementById('keyStatus').innerHTML='<span style="color:var(--text3)">Key deleted</span>';
 }
 document.getElementById('keyMo').addEventListener('click',function(e){if(e.target===this)cKeyMo();});
+
+// ============================================================
+// AI Daily Coach — persona-selectable one-liner in the hero.
+// One API call per day (cached). Falls back to static quote.
+// ============================================================
+const PERSONAS=[
+{id:'kind',label:'優しい先生',prompt:'あなたは優しく寄り添う先生。温かく、決して責めない。'},
+{id:'netsu',label:'熱血コーチ',prompt:'あなたは熱血スポーツコーチ。短く力強く、背中を押す。'},
+{id:'data',label:'アナリスト',prompt:'あなたは冷静なデータアナリスト。数字を根拠に淡々と述べる。'},
+{id:'zen',label:'禅マスター',prompt:'あなたは禅の老師。静かで含蓄のある言葉を使う。'}
+];
+function getPersona(){try{const p=localStorage.getItem('dt_persona');return PERSONAS.find(x=>x.id===p)||PERSONAS[0];}catch(e){return PERSONAS[0];}}
+function cyclePersona(){
+  const cur=getPersona();
+  const next=PERSONAS[(PERSONAS.findIndex(p=>p.id===cur.id)+1)%PERSONAS.length];
+  try{localStorage.setItem('dt_persona',next.id);localStorage.removeItem('dt_coach8');}catch(e){}
+  loadCoach(true);
+}
+async function loadCoach(force){
+  if(!getGKEY())return;
+  const q=document.querySelector('.hero-quote');if(!q)return;
+  const todayStr=new Date().toISOString().slice(0,10);
+  const persona=getPersona();
+  let cached=null;
+  try{cached=JSON.parse(localStorage.getItem('dt_coach8')||'null');}catch(e){}
+  const inject=(text)=>{
+    const el=document.querySelector('.hero-quote');if(!el)return;
+    el.classList.add('ai-coach');
+    el.innerHTML=`${esc(text)}<button class="coach-chip" onclick="cyclePersona()" title="タップで性格を切替">AI · ${getPersona().label}</button>`;
+  };
+  if(!force&&cached&&cached.date===todayStr&&cached.persona===persona.id){inject(cached.text);return;}
+  // Build context
+  const sc=scanStreaks();
+  const now=new Date();const curK=K(now.getFullYear(),now.getMonth()+1);
+  const tod=gTod(curK)||{rem:0,total:0,pct:0};
+  const wds=weekdayStats();
+  const WDJ=['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
+  const weak=wds.worst>=0&&wds.best!==wds.worst?WDJ[wds.worst]:null;
+  const prompt=`${persona.prompt}
+以下は習慣トラッカーの利用者の今日の状況です。この人に向けた今日の一言を日本語で1文、60字以内で。絵文字・記号・引用符は使わない。説教しない。
+- 今日は${WDJ[now.getDay()]}
+- 現在のストリーク: ${sc.current}日
+- 今日の残タスク: ${tod.rem}/${tod.total}
+- 今日の達成率: ${tod.pct}%${weak?`\n- 統計上、${weak}が苦手な傾向`:''}`;
+  try{
+    const text=(await callGem(prompt)).trim().replace(/^["「』『」]+|["「』『」]+$/g,'').slice(0,80);
+    if(!text)return;
+    try{localStorage.setItem('dt_coach8',JSON.stringify({date:todayStr,persona:persona.id,text}));}catch(e){}
+    inject(text);
+  }catch(e){/* keep static quote */}
+}
 
 // --- GEMINI API CALL ---
 async function callGem(prompt){

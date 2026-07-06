@@ -182,7 +182,7 @@ html{background:var(--bg);}
 .bw tr:nth-child(even){background:var(--accentLight2);}
 .bw tr td:first-child,.bw tr td:nth-child(2){background:var(--surfaceSolid);}
 .bw tr:nth-child(even) td:first-child,.bw tr:nth-child(even) td:nth-child(2){background:color-mix(in srgb,var(--surfaceSolid) 95%,var(--accent));}
-.bw tr:hover td:first-child,.bw tr:hover td:nth-child(2){background:var(--accentLight)!important;}
+.bw tr:hover td:first-child,.bw tr:hover td:nth-child(2){background:color-mix(in srgb,var(--accent) 12%,var(--surfaceSolid))!important;}
 
 td.tn{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text4);font-weight:600;height:36px;padding:0;}
 tr.sel-row>td{background:var(--accentLight);}
@@ -716,6 +716,11 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 @media(prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}
 }
+/* ===== Sticky column opacity — must win every state ===== */
+.st td:first-child,.st td:nth-child(2){transform:translateZ(0);}
+.bw td:first-child,.bw td:nth-child(2),.sw td:first-child,.sw td:nth-child(2){background:var(--surfaceSolid);}
+.bw tr.sel-row>td:first-child,.bw tr.sel-row>td:nth-child(2){background:color-mix(in srgb,var(--accent) 10%,var(--surfaceSolid))!important;}
+.bw tr.sel-row:hover>td:first-child,.bw tr.sel-row:hover>td:nth-child(2){background:color-mix(in srgb,var(--accent) 14%,var(--surfaceSolid))!important;}
 /* ===== Cascade-order fixes & touch UX (must stay last) ===== */
 @media(max-width:640px){
 .bnav{display:grid;}

@@ -55,3 +55,21 @@ service cloud.firestore {
 6. commit & push
 
 データは `users/{あなたのUID}/tracker/main` に保存され、本人以外は読み書きできません。
+
+## 通知リマインダーのセットアップ
+
+未記入の日だけ、選んだ時刻(19〜23時)にプッシュ通知が届きます。送信はGitHub Actions(無料)が毎時行います。
+
+1. **VAPIDキー**: Firebaseコンソール → プロジェクトの設定 → **Cloud Messaging** タブ → 「ウェブプッシュ証明書」→ **鍵ペアを生成** → 公開鍵をコピーし、`index.html` の `FIREBASE_VAPID_KEY` に貼り付け
+2. **サービスアカウント**: プロジェクトの設定 → **サービスアカウント** タブ → **新しい秘密鍵の生成** → JSONをダウンロード
+3. **GitHub Secret**: リポジトリの Settings → Secrets and variables → **Actions** → New repository secret → Name: `FIREBASE_SERVICE_ACCOUNT`、Value: JSONファイルの中身を丸ごと貼り付け
+4. push後、アプリの☁ポップオーバーから時刻を選んで通知を**ON**に
+
+- iPhoneは「ホーム画面に追加」したKISEKIから有効化してください(iOS 16.4以上)
+- 動作テスト: リポジトリの Actions → Daily reminder → **Run workflow** で手動実行できます
+
+## ストリーク仕様
+
+- ストリークは月をまたいで通算されます
+- **フリーズ**: 1日だけ記録がなくても自動で救済されます(活動7日ごとに1回まで)。2日連続で空くとリセット
+- 3/7/14/30/50/100/200/365日でバッジを獲得。Dashboardの「Streak Badges」で確認できます

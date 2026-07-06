@@ -1,8 +1,11 @@
 // KISEKI Service Worker — offline-first app shell + runtime font caching
-const VERSION = 'kiseki-v10';
+const VERSION = 'kiseki-v11';
 const SHELL = [
   './',
   './index.html',
+  './styles.css',
+  './app.js',
+  './cloud.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -53,4 +56,25 @@ self.addEventListener('fetch', e => {
         .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
     );
   }
+});
+
+// ===== Push notifications =====
+self.addEventListener('push', e => {
+  let p = {};
+  try { p = e.data.json(); } catch (_) {}
+  const d = p.data || p.notification || {};
+  e.waitUntil(self.registration.showNotification(d.title || 'KISEKI', {
+    body: d.body || '今日の記録がまだです。1分で完了します 🔥',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    tag: 'kiseki-reminder',
+    data: { url: './' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow('./');
+  }));
 });

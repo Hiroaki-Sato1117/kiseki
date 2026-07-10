@@ -241,6 +241,7 @@ window.onCloudAuth=async function(u){
       cloudPush();
     }
     CLOUD.subscribe(data=>{if(data.updatedAt>dataUpdatedAt)adoptRemote(data);});
+    syncSettingsDown();
   }catch(e){console.error('cloud init',e);setSync('err');}
 };
 function updateCloudBtn(){
@@ -282,7 +283,16 @@ function cloudBtnClick(){
         btn.classList.remove('on');btn.textContent='OFF';
         try{localStorage.setItem('dt_push','0');}catch(_){}
       }else{
-        if(!(await CLOUD.pushSupported())){alert('この環境では通知を利用できません。\n・VAPIDキーが未設定の可能性があります\n・iPhoneはホーム画面に追加したアプリから有効化してください(iOS 16.4以上)');return;}
+        const info=await CLOUD.pushSupportInfo();
+        if(!info.ok){
+          const msgs={
+            vapid:'通知の初期設定が未完了です。\n\nFirebaseコンソール → プロジェクトの設定 → Cloud Messaging → 「ウェブプッシュ証明書」で鍵ペアを生成し、公開鍵を index.html の FIREBASE_VAPID_KEY に貼ってpushしてください(READMEの手順①)。',
+            'ios-browser':'iPhoneのSafariからは通知を有効化できません。\n\n共有ボタン → 「ホーム画面に追加」でKISEKIを追加し、ホーム画面のKISEKIアプリを開いてからONにしてください(iOS 16.4以上)。',
+            denied:'通知がブロックされています。\n\niPhone: 設定 → 通知 → KISEKI で許可\nPC(Chrome): アドレスバー左の設定アイコン → 通知を許可\nに変更してから、もう一度ONにしてください。',
+            unsupported:'お使いのブラウザは通知に対応していません。ChromeまたはEdge、iPhoneはホーム画面追加のKISEKIをご利用ください。'
+          };
+          alert(msgs[info.reason]||msgs.unsupported);return;
+        }
         btn.textContent='...';
         await CLOUD.pushEnable(hour);
         btn.classList.add('on');btn.textContent='ON';
@@ -1913,8 +1923,24 @@ try{const cw=localStorage.getItem('dt8_colW');if(cw)document.documentElement.sty
 
 // --- GEMINI API KEY MANAGEMENT ---
 function getGKEY(){return localStorage.getItem('gemini_api_key');}
-function setGKEY(k){localStorage.setItem('gemini_api_key',k);}
-function delGKEY(){localStorage.removeItem('gemini_api_key');}
+function setGKEY(k){localStorage.setItem('gemini_api_key',k);pushSettingsUp();}
+function delGKEY(){localStorage.removeItem('gemini_api_key');pushSettingsUp();}
+function pushSettingsUp(){
+  if(window.CLOUD&&CLOUD.enabled&&CLOUD.user&&CLOUD.saveSettings)
+    CLOUD.saveSettings({geminiKey:getGKEY()||null}).catch(()=>{});
+}
+async function syncSettingsDown(){
+  if(!window.CLOUD||!CLOUD.enabled||!CLOUD.user||!CLOUD.loadSettings)return;
+  try{
+    const s=await CLOUD.loadSettings();
+    if(s&&s.geminiKey&&s.geminiKey!==getGKEY()){
+      localStorage.setItem('gemini_api_key',s.geminiKey);
+      if(cv==='dashboard')rDash();
+    }else if((!s||!s.geminiKey)&&getGKEY()){
+      pushSettingsUp(); // ローカルにだけあるキーをクラウドへ
+    }
+  }catch(e){}
+}
 function shKBHelp(){document.getElementById('kbMo').classList.add('open');}
 document.getElementById('kbMo').addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 function oKeyMo(){

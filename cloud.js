@@ -28,11 +28,25 @@ if (cfg && cfg.apiKey && !String(cfg.apiKey).includes('PASTE')) {
       subscribe: (cb) => { if (unsub) unsub(); unsub = onSnapshot(userDoc(), s => { if (s.exists() && !s.metadata.hasPendingWrites) cb(s.data()); }); },
       unsubscribe: () => { if (unsub) { unsub(); unsub = null; } },
       pushDoc: () => doc(db, 'users', auth.currentUser.uid, 'tracker', 'push'),
-      pushSupported: async () => {
+      settingsDoc: () => doc(db, 'users', auth.currentUser.uid, 'tracker', 'settings'),
+      saveSettings: (obj) => setDoc(window.CLOUD.settingsDoc(), { ...obj, updatedAt: Date.now() }, { merge: true }),
+      loadSettings: async () => { const s = await getDoc(window.CLOUD.settingsDoc()); return s.exists() ? s.data() : null; },
+      pushSupportInfo: async () => {
         const vk = window.FIREBASE_VAPID_KEY;
-        if (!vk || String(vk).includes('PASTE') || !('Notification' in window) || !('serviceWorker' in navigator)) return false;
-        try { const m = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js'); return await m.isSupported(); } catch (e) { return false; }
+        if (!vk || String(vk).includes('PASTE')) return { ok: false, reason: 'vapid' };
+        const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+        const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+        if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+          return { ok: false, reason: (iOS && !standalone) ? 'ios-browser' : 'unsupported' };
+        }
+        if (Notification.permission === 'denied') return { ok: false, reason: 'denied' };
+        try {
+          const m = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
+          if (!(await m.isSupported())) return { ok: false, reason: (iOS && !standalone) ? 'ios-browser' : 'unsupported' };
+        } catch (e) { return { ok: false, reason: 'unsupported' }; }
+        return { ok: true };
       },
+      pushSupported: async () => (await window.CLOUD.pushSupportInfo()).ok,
       pushEnable: async (hour) => {
         const m = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
         const perm = await Notification.requestPermission();

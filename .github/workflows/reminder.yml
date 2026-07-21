@@ -1,8 +1,10 @@
 name: Daily reminder
 on:
   schedule:
-    # UTC 10:00-14:00 = JST 19:00-23:00 に毎時実行
-    - cron: '0 10-14 * * *'
+    # 5分ごとに終日実行し、ユーザーが選んだ任意の時刻(分単位)を
+    # 5分単位のスロットで判定して送信する(GitHub Actionsで安定して
+    # 保証できる最小間隔が5分程度のため)
+    - cron: '*/5 * * * *'
   workflow_dispatch: {}
 
 jobs:

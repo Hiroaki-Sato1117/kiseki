@@ -1,5 +1,5 @@
 // KISEKI Service Worker — offline-first app shell + runtime font caching
-const VERSION = 'kiseki-v15';
+const VERSION = 'kiseki-v18';
 const SHELL = [
   './',
   './index.html',

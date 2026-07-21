@@ -47,13 +47,14 @@ if (cfg && cfg.apiKey && !String(cfg.apiKey).includes('PASTE')) {
         return { ok: true };
       },
       pushSupported: async () => (await window.CLOUD.pushSupportInfo()).ok,
-      pushEnable: async (hour) => {
+      pushEnable: async (hour, minute) => {
         const m = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
         const perm = await Notification.requestPermission();
         if (perm !== 'granted') throw new Error('通知が許可されませんでした');
         const reg = await navigator.serviceWorker.ready;
         const token = await m.getToken(m.getMessaging(app), { vapidKey: window.FIREBASE_VAPID_KEY, serviceWorkerRegistration: reg });
-        await setDoc(window.CLOUD.pushDoc(), { token, hour, tz: 'Asia/Tokyo', enabled: true, updatedAt: Date.now() });
+        const min = Number.isFinite(minute) ? minute : 0;
+        await setDoc(window.CLOUD.pushDoc(), { token, hour, minute: min, tz: 'Asia/Tokyo', enabled: true, updatedAt: Date.now() });
         return token;
       },
       pushDisable: async () => { await setDoc(window.CLOUD.pushDoc(), { enabled: false, updatedAt: Date.now() }, { merge: true }); },

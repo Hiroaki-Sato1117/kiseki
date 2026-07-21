@@ -1,6 +1,7 @@
-// KISEKI reminder sender — runs hourly (JST 19-23) via GitHub Actions.
-// Sends a push notification to users whose chosen hour matches now
-// and who haven't marked anything today yet.
+// KISEKI reminder sender — runs every 5 minutes via GitHub Actions.
+// Users can pick any HH:MM in the UI; delivery lands within a 5-minute
+// window of that time (GitHub Actions cron practically can't guarantee
+// tighter granularity than ~5 min, so we match on 5-min "slots").
 const admin = require('firebase-admin');
 
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -8,16 +9,20 @@ admin.initializeApp({ credential: admin.credential.cert(sa) });
 const db = admin.firestore();
 
 function jstNow() {
-  return new Date(Date.now() + 9 * 3600 * 1000); // UTC+9
+  return new Date(Date.now() + 9 * 3600 * 1000); // UTC+9, read fields as UTC
+}
+function slotOf(hh, mm) {
+  return Math.floor((hh * 60 + mm) / 5) * 5;
 }
 
 async function main() {
   const now = jstNow();
-  const hour = now.getUTCHours(); // shifted date → UTC fields are JST
+  const hour = now.getUTCHours(), minute = now.getUTCMinutes();
   const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1, d = now.getUTCDate();
   const curK = `${y}-${String(m).padStart(2, '0')}`;
   const todayStr = `${curK}-${String(d).padStart(2, '0')}`;
-  console.log(`JST ${todayStr} ${hour}:00 — checking users...`);
+  const nowSlot = slotOf(hour, minute);
+  console.log(`JST ${todayStr} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (slot ${nowSlot}) — checking users...`);
 
   const userRefs = await db.collection('users').listDocuments();
   let sent = 0, skipped = 0;
@@ -27,7 +32,9 @@ async function main() {
       const pushSnap = await uref.collection('tracker').doc('push').get();
       if (!pushSnap.exists) { skipped++; continue; }
       const p = pushSnap.data();
-      if (!p.enabled || !p.token || Number(p.hour) !== hour) { skipped++; continue; }
+      if (!p.enabled || !p.token) { skipped++; continue; }
+      const userSlot = slotOf(Number(p.hour) || 0, Number(p.minute) || 0);
+      if (userSlot !== nowSlot) { skipped++; continue; }
       if (p.lastSent === todayStr) { skipped++; continue; }
 
       // Skip if the user already marked something today

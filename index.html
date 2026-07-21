@@ -30,7 +30,7 @@ window.FIREBASE_CONFIG = {
 };
 // 通知リマインダー用: Firebaseコンソール → プロジェクトの設定 → Cloud Messaging
 // → 「ウェブプッシュ証明書」→ 鍵ペアを生成 → 公開鍵をここに貼り付け
-window.FIREBASE_VAPID_KEY = "BJzIIRS7cf9k7fMvaPzaB-TnXghfQc8DF04WZ9CCGL0_bH_mptFB8dtGXpbJzAbwVqPhQ8eFiEcKJDXjwRKsioM"
+window.FIREBASE_VAPID_KEY = "PASTE_YOUR_VAPID_PUBLIC_KEY";
 </script>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -38,6 +38,7 @@ window.FIREBASE_VAPID_KEY = "BJzIIRS7cf9k7fMvaPzaB-TnXghfQc8DF04WZ9CCGL0_bH_mptF
 <div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
 <canvas id="particles"></canvas>
 <nav class="nav">
+ <div class="nav-inner">
   <div class="nav-brand">
     <svg class="nav-logo" width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <path d="M8 56h10V46h10V36h9" stroke="rgba(255,255,255,.8)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -64,16 +65,21 @@ window.FIREBASE_VAPID_KEY = "BJzIIRS7cf9k7fMvaPzaB-TnXghfQc8DF04WZ9CCGL0_bH_mptF
     </button>
     <button class="tbtn" id="tb" onclick="tTh()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M4.4 4.4l1.8 1.8M17.8 17.8l1.8 1.8M2.5 12H5M19 12h2.5M4.4 19.6l1.8-1.8M17.8 6.2l1.8-1.8"/></svg></button>
   </div>
+ </div>
 </nav>
-<div class="main"><div class="mv" id="mV"></div><div class="dv" id="dV"></div></div>
+<div class="main"><div class="mv" id="mV"></div><div class="dv" id="dV"></div><div class="dv" id="aV"></div></div>
 <nav class="bnav" id="bnav">
-  <button id="bnTasks" onclick="sw('tasks')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M3 5.5l1.5 1.5L7 4.5"/><path d="M3 11.5l1.5 1.5L7 10.5"/><path d="M3 17.5l1.5 1.5L7 16.5"/></svg>
-    Tasks
+  <button id="bnTasks" onclick="sw('today')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    入力
   </button>
   <button id="bnDash" onclick="sw('dashboard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+    記録
+  </button>
+  <button id="bnAna" onclick="sw('analytics')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="20" x2="6" y2="12"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="18" y1="20" x2="18" y2="9"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
-    Dashboard
+    分析
   </button>
 </nav>
 <button class="jt" id="jt" onclick="jumpToday()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>Today</button>

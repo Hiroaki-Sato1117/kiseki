@@ -13,6 +13,21 @@ function pK(k) { return k.split('-').map(Number); }
 // Month list builder
 // ============================================================
 // Dynamic MS: from earliest data month (min 2026-02) to now+12 months
+// ============================================================
+// Logical "day" boundary: a new day starts at 05:00 local time.
+// Before 5am, we still consider it "yesterday" for input purposes.
+// ============================================================
+const DAY_ROLLOVER_HOUR=5;
+function logicalNow(){
+  const n=new Date();
+  if(n.getHours()<DAY_ROLLOVER_HOUR)n.setDate(n.getDate()-1);
+  return n;
+}
+function logicalToday(){const n=logicalNow();return new Date(n.getFullYear(),n.getMonth(),n.getDate());}
+function isInputDay(k,d){
+  const t=logicalNow();const[y,m]=pK(k);
+  return t.getFullYear()===y&&t.getMonth()+1===m&&t.getDate()===d;
+}
 function buildMS(data){
   const n=new Date();const ey=n.getFullYear(),em=n.getMonth()+1;
   let endTotal=ey*12+em+12;
@@ -222,7 +237,7 @@ function adoptRemote(remote){
     const now=new Date(),ck=K(now.getFullYear(),now.getMonth()+1);
     if(!curMonth||!MS.some(({y,m})=>K(y,m)===ck&&K(y,m)===curMonth))curMonth=curMonth&&MS.some(({y,m})=>K(y,m)===curMonth)?curMonth:ck;
     iM(curMonth);
-    if(cv==='dashboard')rDash();else rMo(curMonth);
+    if(cv==='analytics')rDash();else if(cv==='dashboard')rBoard(curMonth);else rToday();
     setSync('ok');
   }catch(e){console.error('adoptRemote',e);}
 }
@@ -259,23 +274,31 @@ function cloudBtnClick(){
   }
   const ex=document.getElementById('cloudPop');if(ex){cCloudPop();return;}
   const pop=document.createElement('div');pop.id='cloudPop';pop.className='cloud-pop';
-  const savedHour=(()=>{try{return parseInt(localStorage.getItem('dt_push_hour'))||21;}catch(e){return 21;}})();
+  const savedTime=(()=>{try{return localStorage.getItem('dt_push_time')||'21:00';}catch(e){return '21:00';}})();
   const pushOn=(()=>{try{return localStorage.getItem('dt_push')==='1';}catch(e){return false;}})();
   pop.innerHTML=`<div class="cp-mail">${esc(CLOUD.user.email||'')}</div>
   <div class="cp-state">${syncState==='ok'?'✓ クラウド同期済み':syncState==='syncing'?'同期中…':syncState==='err'?'⚠ 同期エラー':''}</div>
   <div class="cp-sec">通知リマインダー</div>
   <div class="cp-row">
-    <select id="cpHour" class="cp-sel">${[19,20,21,22,23].map(hh=>`<option value="${hh}"${hh===savedHour?' selected':''}>${hh}:00</option>`).join('')}</select>
+    <input type="time" id="cpTime" class="cp-time" step="60" value="${savedTime}">
     <button class="cp-push${pushOn?' on':''}" id="cpPush">${pushOn?'ON':'OFF'}</button>
   </div>
-  <div class="cp-note">未記入の日だけ選択時刻に通知します<br>(スマホはホーム画面追加後に有効化)</div>
+  <div class="cp-note">未記入の日だけ選択時刻(5分単位で判定)に通知します<br>(スマホはホーム画面追加後に有効化)</div>
   <button class="cp-out" id="cpOut">ログアウト</button>`;
   document.body.appendChild(pop);
   document.getElementById('cpOut').onclick=e=>{e.stopPropagation();CLOUD.signOut();cCloudPop();};
-  document.getElementById('cpHour').onclick=e=>e.stopPropagation();
+  document.getElementById('cpTime').onclick=e=>e.stopPropagation();
+  document.getElementById('cpTime').onchange=async e=>{
+    e.stopPropagation();
+    const t=e.currentTarget.value||'21:00';
+    try{localStorage.setItem('dt_push_time',t);}catch(_){}
+    if(!document.getElementById('cpPush').classList.contains('on'))return;
+    try{const parts=t.split(':');const hh=parseInt(parts[0]),mm=parseInt(parts[1]);await CLOUD.pushEnable(hh,mm);}catch(_){}
+  };
   document.getElementById('cpPush').onclick=async e=>{
     e.stopPropagation();
-    const btn=e.currentTarget,hour=parseInt(document.getElementById('cpHour').value)||21;
+    const btn=e.currentTarget,t=document.getElementById('cpTime').value||'21:00';
+    const parts=t.split(':');const hh=parseInt(parts[0]),mm=parseInt(parts[1]);
     const on=btn.classList.contains('on');
     try{
       if(on){
@@ -294,14 +317,14 @@ function cloudBtnClick(){
           alert(msgs[info.reason]||msgs.unsupported);return;
         }
         btn.textContent='...';
-        await CLOUD.pushEnable(hour);
+        await CLOUD.pushEnable(hh,mm);
         btn.classList.add('on');btn.textContent='ON';
-        try{localStorage.setItem('dt_push','1');localStorage.setItem('dt_push_hour',String(hour));}catch(_){}
+        try{localStorage.setItem('dt_push','1');localStorage.setItem('dt_push_time',t);}catch(_){}
       }
     }catch(err){btn.textContent=on?'ON':'OFF';alert('通知設定に失敗しました: '+(err.message||err));}
   };
   const btn=document.getElementById('cloudBtn'),r=btn.getBoundingClientRect(),pr=pop.getBoundingClientRect();
-  pop.style.top=(r.bottom+8)+'px';
+  
   pop.style.left=Math.max(8,Math.min(r.left+r.width/2-pr.width/2,innerWidth-pr.width-8))+'px';
   setTimeout(()=>document.addEventListener('click',oCloseCloud),0);
 }
@@ -431,7 +454,7 @@ function showUndoToast(sym){
   _utT=setTimeout(hideUndoToast,4000);
 }
 function hideUndoToast(){const el=document.getElementById('undoToast');if(el)el.classList.remove('show');}
-function undoMk(){if(!undoStack.length)return;const a=undoStack.pop();redoStack.push(a);if(a.batch){a.batch.forEach(o=>sMk(o.k,o.ti,o.d,o.old,true));scR(a.batch[0].k);}else{sMk(a.k,a.ti,a.d,a.old,true);scR(a.k);}}
+function undoMk(){if(!undoStack.length)return;const a=undoStack.pop();redoStack.push(a);if(a.batch){a.batch.forEach(o=>sMk(o.k,o.ti,o.d,o.old,true));scR(a.batch[0].k);}else{sMk(a.k,a.ti,a.d,a.old,true);scP(a.k,a.ti,a.d);}}
 function redoMk(){if(!redoStack.length)return;const a=redoStack.pop();undoStack.push(a);if(a.batch){a.batch.forEach(o=>sMk(o.k,o.ti,o.d,o.nw,true));scR(a.batch[0].k);}else{sMk(a.k,a.ti,a.d,a.nw,true);scR(a.k);}}
 function mV(t){return t?MK[t].v:0;}
 
@@ -487,7 +510,7 @@ function dayOK(k,d){
 // ---- Deep stats: weekday performance & per-task streaks ----
 function weekdayStats(){
   const acc=Array.from({length:7},()=>({sum:0,n:0}));
-  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const today=logicalToday();const now=today;
   MS.forEach(({y,m})=>{
     const k=K(y,m);const md=D[k];if(!md)return;
     const days=dim(y,m);
@@ -507,7 +530,7 @@ function weekdayStats(){
   return{days:out,best:bi,worst:wi};
 }
 function taskStreak(name){
-  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const today=logicalToday();const now=today;
   let cur=0,best=0;
   if(MS.length){
     const dt=new Date(MS[0].y,MS[0].m-1,1);
@@ -571,7 +594,7 @@ function gBestStr(k){
   if(cur>best)best=cur;return best;
 }
 function gTod(k){
-  const[y,m]=pK(k);const now=new Date();
+  const[y,m]=pK(k);const now=logicalNow();
   if(now.getFullYear()!==y||now.getMonth()+1!==m)return null;
   const d=now.getDate();const md=D[k];if(!md)return null;
   const act=md.tasks.filter(t=>isA(t,d));
@@ -583,7 +606,7 @@ function gTod(k){
   const total=act.length-skipped;
   return{day:d,marked:mk,total,pct:total>0?Math.round(Math.min(sc/total,1)*100):0,rem:total-mk};
 }
-function weekDiff(k){const md=D[k];if(!md)return null;const[y,m]=pK(k);const now=new Date();if(now.getFullYear()!==y||now.getMonth()+1!==m)return null;const td=now.getDate();if(td<8)return null;let tw=0,twp=0,lw=0,lwp=0;
+function weekDiff(k){const md=D[k];if(!md)return null;const[y,m]=pK(k);const now=logicalNow();if(now.getFullYear()!==y||now.getMonth()+1!==m)return null;const td=now.getDate();if(td<8)return null;let tw=0,twp=0,lw=0,lwp=0;
 for(let d=td;d>td-7&&d>=1;d--){const act=md.tasks.filter(t=>isA(t,d));act.forEach(t=>{const mk=gMk(k,md.tasks.indexOf(t),d);if(mk!=='skip'){twp++;tw+=mV(mk);}});}
 for(let d=td-7;d>td-14&&d>=1;d--){const act=md.tasks.filter(t=>isA(t,d));act.forEach(t=>{const mk=gMk(k,md.tasks.indexOf(t),d);if(mk!=='skip'){lwp++;lw+=mV(mk);}});}
 if(!lwp||!twp)return null;return Math.round((tw/twp-lw/lwp)*100);}
@@ -591,14 +614,46 @@ if(!lwp||!twp)return null;return Math.round((tw/twp-lw/lwp)*100);}
 // ============================================================
 // Navigation & view switching
 // ============================================================
+const TABS=[['today','入力'],['dashboard','記録'],['analytics','分析']];
 function rNav(){const n=document.getElementById('nv');n.innerHTML='';
-const tb=document.createElement('button');tb.className='ntab'+(cv==='tasks'?' active':'');tb.textContent='Tasks';tb.onclick=()=>sw('tasks');n.appendChild(tb);
-const db=document.createElement('button');db.className='ntab'+(cv==='dashboard'?' active':'');db.textContent='Dashboard';db.onclick=()=>sw('dashboard');n.appendChild(db);
-const bt=document.getElementById('bnTasks'),bd=document.getElementById('bnDash');
-if(bt)bt.classList.toggle('active',cv==='tasks');
-if(bd)bd.classList.toggle('active',cv==='dashboard');}
-function sw(v){cv=v;try{localStorage.setItem('tab8',v);}catch(e){}rNav();cDD();cPop();if(v==='dashboard'){document.getElementById('mV').className='mv';document.getElementById('dV').className='dv active';rDash();}else{document.getElementById('dV').className='dv';document.getElementById('mV').className='mv active';iM(curMonth);rMo(curMonth);}updateJT(curMonth);}
-function swMonth(k){curMonth=k;iM(k);rNav();rMo(k);setTimeout(initSel,50);}
+TABS.forEach(([id,label])=>{const b=document.createElement('button');b.className='ntab'+(cv===id?' active':'');b.textContent=label;b.onclick=()=>sw(id);n.appendChild(b);});
+const bt=document.getElementById('bnTasks'),bd=document.getElementById('bnDash'),ba=document.getElementById('bnAna');
+if(bt)bt.classList.toggle('active',cv==='today');
+if(bd)bd.classList.toggle('active',cv==='dashboard');
+if(ba)ba.classList.toggle('active',cv==='analytics');}
+function sw(v){cv=v;try{localStorage.setItem('tab8',v);}catch(e){}rNav();cDD();cPop();
+const mV=document.getElementById('mV'),dV=document.getElementById('dV'),aV=document.getElementById('aV');
+mV.className='mv';dV.className='dv';aV.className='dv';
+if(v==='today'){mV.className='mv active';rToday();}
+else if(v==='dashboard'){dV.className='dv active';iM(curMonth);rBoard(curMonth);}
+else{aV.className='dv active';rDash();}
+updateJT(curMonth);}
+function swMonth(k){curMonth=k;iM(k);rNav();rBoard(k);setTimeout(initSel,50);}
+function stepMonth(dir){
+  const i=MS.findIndex(x=>K(x.y,x.m)===curMonth);
+  const ni=i+dir;if(ni<0||ni>=MS.length)return;
+  swMonth(K(MS[ni].y,MS[ni].m));
+}
+function tMoPop(e){
+  e.stopPropagation();
+  const ex=document.getElementById('moPop');if(ex){cMoPop();return;}
+  const pop=document.createElement('div');pop.id='moPop';pop.className='mo-pop';
+  const now2=new Date();let html='',py=null;
+  MS.forEach(({y:my,m:mm})=>{
+    const mk2=K(my,mm);
+    if(my!==py){html+=`${py!==null?'</div>':''}<div class="mo-pop-yr">${my}</div><div class="mo-pop-grid">`;py=my;}
+    const isCur2=my===now2.getFullYear()&&mm===now2.getMonth()+1;
+    html+=`<button class="mo-pop-m${mk2===curMonth?' on':''}${isCur2?' cur':''}" onclick="swMonth('${mk2}');cMoPop();">${MN[mm]}</button>`;
+  });
+  html+='</div>';
+  pop.innerHTML=html;document.body.appendChild(pop);
+  const r=e.currentTarget.getBoundingClientRect(),pr=pop.getBoundingClientRect();
+  pop.style.top=(r.bottom+8)+'px';
+  pop.style.left=Math.max(8,Math.min(r.left+r.width/2-pr.width/2,innerWidth-pr.width-8))+'px';
+  setTimeout(()=>document.addEventListener('click',oCloseMo),0);
+}
+function oCloseMo(ev){const p=document.getElementById('moPop');if(p&&!p.contains(ev.target))cMoPop();}
+function cMoPop(){const p=document.getElementById('moPop');if(p)p.remove();document.removeEventListener('click',oCloseMo);}
 
 function sortedTasks(md){
   const active=[],deleted=[];
@@ -609,22 +664,12 @@ function sortedTasks(md){
 // ============================================================
 // Month view rendering
 // ============================================================
-function rMo(k,scrollState){
-const md=D[k],[y,m]=pK(k),days=dim(y,m),stats=gS(k),tod=gTod(k),str=tod?scanStreaks().current:gStr(k);
-const now=new Date(),isCur=now.getFullYear()===y&&now.getMonth()+1===m,td=isCur?now.getDate():-1;
+function rToday(){
+const k=K(logicalNow().getFullYear(),logicalNow().getMonth()+1);
+if(!D[k])iM(k);
+const md=D[k],[y,m]=pK(k),stats=gS(k),tod=gTod(k),str=scanStreaks().current;
 const wd=weekDiff(k);
-const sorted=sortedTasks(md);
-let h='<div class="mo-tabs" id="moTabs">';
-const nowY=now.getFullYear(),nowM=now.getMonth()+1;
-let prevY=null;
-MS.forEach(({y:my,m:mm})=>{
-  if(prevY!==null&&my!==prevY)h+=`<span class="mo-sep"></span><span class="mo-yr">'${String(my).slice(2)}</span>`;
-  if(prevY===null)h+=`<span class="mo-yr">'${String(my).slice(2)}</span>`;
-  prevY=my;
-  const mk=K(my,mm);const isCurM=my===nowY&&mm===nowM;
-  h+=`<button class="dtab${mk===k?' active':''}${isCurM?' cur':''}" onclick="swMonth('${mk}')" data-mk="${mk}">${MN[mm]}</button>`;
-});
-h+='</div>';
+let h='';
 if(tod){
 const q=getQuote();
 const mRate=stats.ep>0?Math.round(Math.min(stats.ts/stats.ep,1)*100):0;
@@ -667,25 +712,101 @@ h+=`<div class="hero">
 </div>
 </div>`;
 
-// Quick Check panel — one-tap marking for today's tasks (no grid scrolling needed)
-const qpOpen=(()=>{try{return localStorage.getItem('dt_qp')!=='0';}catch(e){return true;}})();
-h+=`<div class="qp${qpOpen?' open':''}" id="qp"><button class="qp-head" onclick="tQP()"><span class="qp-title"><svg class="qp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>Quick Check</span><span class="qp-rem${tod.rem===0?' done':''}">${tod.rem===0?'All done':tod.rem+' left'}</span><span class="qp-chev">▾</span></button><div class="qp-body">`;
-let qpRows=0;
+
+// 当日タスクの入力カード(単一チェックボタン)
+h+=`<div class="today-list">`;
+let rows=0;
 md.tasks.forEach((task,ti)=>{
   if(isDeleted(task)||!isA(task,tod.day))return;
   const cm=gMk(k,ti,tod.day);
   if(cm==='skip')return;
-  qpRows++;
-  h+=`<div class="qp-row${cm?' qp-done':''}"><span class="qp-name">${esc(task.name)}</span><div class="qp-marks">`;
-  [['double','◎','d'],['single','○','s'],['half','△','h'],['zero','×','z']].forEach(([t,s,c])=>{
-    h+=`<button class="qp-mk${cm===t?' on-'+c:''}" onclick="qpMk(event,'${k}',${ti},${tod.day},'${t}')" title="${t}">${s}</button>`;
-  });
-  h+=`</div></div>`;
+  rows++;
+  const done=cm!==null&&cm!=='zero';
+  h+=`<button class="tcard${done?' done':''}" onclick="todayToggle('${k}',${ti},${tod.day})">
+    <span class="tcard-name">${esc(task.name)}</span>
+    <span class="tcard-check">${done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':''}</span>
+  </button>`;
 });
-if(qpRows===0)h+=`<div class="qp-all">No tasks for today</div>`;
-else if(tod.rem===0)h+=`<div class="qp-all">All tasks marked — great job!</div>`;
-h+=`<div class="qp-add"><input id="qpNewTask" class="qp-add-in" placeholder="新しいタスクを追加..." maxlength="60" onkeydown="if(event.key==='Enter')qpAdd('${k}')"><button class="qp-add-btn" onclick="qpAdd('${k}')" title="Add task">+</button></div>`;
-h+=`</div></div>`;}
+if(rows===0)h+=`<div class="today-empty">今日のタスクがありません</div>`;
+h+=`</div>`;
+// タスク追加
+h+=`<div class="today-add"><input id="qpNewTask" class="qp-add-in" placeholder="新しいタスクを追加..." maxlength="60" onkeydown="if(event.key==='Enter')qpAdd('${k}')"><button class="qp-add-btn" onclick="qpAdd('${k}')" title="Add task">+</button></div>`;
+}else{
+h+=`<div class="today-empty" style="margin-top:40px">今日のデータを準備中…</div>`;
+}
+const mvEl=document.getElementById('mV');
+mvEl.className='mv active';
+mvEl.innerHTML=h;
+requestAnimationFrame(()=>{
+  drCh&&0; // noop
+  if(tod){
+    mvEl.querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
+    const ring=document.querySelector('.td-ring-prog');
+    if(ring)setTimeout(()=>{ring.style.strokeDashoffset=ring.dataset.final;},80);
+    checkCeleb(tod);checkMilestone();
+  }
+  setSync(syncState);
+});
+}
+// 入力タブ: 単一チェックのトグル(○ ⇔ 解除)
+function todayToggle(k,ti,d){
+  if(!isInputDay(k,d))return;
+  const cur=gMk(k,ti,d);
+  const done=cur!==null&&cur!=='zero';
+  sMk(k,ti,d,done?null:'single');
+  pS(done?'clear':'single');
+  patchToday(k,ti,d);
+}
+function patchToday(k,ti,d){
+  try{
+    const md=D[k];const mk=gMk(k,ti,d);
+    const done=mk!==null&&mk!=='zero';
+    const btns=document.querySelectorAll('.tcard');
+    // 対象カードを探す(onclick属性で照合)
+    const card=[...btns].find(b=>b.getAttribute('onclick')===`todayToggle('${k}',${ti},${d})`);
+    if(card){
+      card.classList.toggle('done',done);
+      card.querySelector('.tcard-check').innerHTML=done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'';
+    }
+    // ヒーロー更新(patchMarkのヒーロー部分を流用)
+    const tod=gTod(k);const stats=gS(k);
+    if(tod){
+      setNumNow(document.querySelector('.hero-pct b'),tod.pct+'%');
+      const ring=document.querySelector('.hero-prog');
+      if(ring){const C=parseFloat(ring.getAttribute('stroke-dasharray'));ring.style.strokeDashoffset=(C*(1-tod.pct/100)).toFixed(2);}
+      let tScore=0;md.tasks.forEach((t,i2)=>{if(!isA(t,tod.day))return;const m2=gMk(k,i2,tod.day);if(m2!=='skip')tScore+=mV(m2);});
+      const hns=document.querySelectorAll('.hero-nums .hn b');
+      setNumNow(hns[0],tScore>0?tScore.toFixed(1).replace(/\.0$/,''):'0');
+      setNumNow(hns[1],tod.marked+'/'+tod.total);
+      const sc2=scanStreaks();
+      setNumNow(document.querySelector('.hero-streak b'),sc2.current);
+      const nb=document.querySelector('.chip-badge b');if(nb&&sc2.next)nb.textContent=(sc2.next-sc2.current)+'d';
+      checkCeleb(tod);checkMilestone();
+    }
+    setSync(syncState);
+  }catch(e){console.error('patchToday',e);rToday();}
+}
+function rMo(k,scrollState){return rBoard(k,scrollState);} // back-compat alias
+function rCur(){ // 現在のタブを再描画
+  if(cv==='today')rToday();
+  else if(cv==='dashboard'){iM(curMonth);rBoard(curMonth);}
+  else rDash();
+}
+
+function rBoard(k,scrollState){
+const md=D[k],[y,m]=pK(k),days=dim(y,m),stats=gS(k),tod=gTod(k),str=tod?scanStreaks().current:gStr(k);
+const now=new Date(),isCur=now.getFullYear()===y&&now.getMonth()+1===m,td=isCur?now.getDate():-1;
+const wd=weekDiff(k);
+const sorted=sortedTasks(md);
+const idxM=MS.findIndex(x=>K(x.y,x.m)===k);
+const nowY=now.getFullYear(),nowM=now.getMonth()+1,curKey=K(nowY,nowM);
+let h='<div class="mo-nav" id="moTabs">';
+h+=`<button class="mo-arrow" onclick="stepMonth(-1)"${idxM<=0?' disabled':''} title="前の月"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>`;
+h+=`<button class="mo-cur" onclick="tMoPop(event)">${MNF[m]} ${y}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
+h+=`<button class="mo-arrow" onclick="stepMonth(1)"${idxM>=MS.length-1?' disabled':''} title="次の月"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>`;
+if(!isCur&&MS.some(x=>K(x.y,x.m)===curKey))h+=`<button class="mo-today" onclick="swMonth('${curKey}')">今月へ</button>`;
+h+='</div>';
+
 
 const gridOpen=(()=>{try{return localStorage.getItem('dt_grid')!=='0';}catch(e){return true;}})();
 h+=`<div class="card${gridOpen?'':' closed'}" style="position:relative">`;
@@ -748,18 +869,15 @@ h+=`<div class="cs">
 </div>`;
 h+=`<div class="ftr"><button onclick="exC('${k}')">Export CSV</button><button onclick="exportData()">Backup JSON</button><button onclick="importData()">Restore JSON</button><span class="si" id="si">✓ Saved</span><span class="sync-pill" id="syncPill"></span><span class="ht">Click=select · Click again / Dbl / Hold=menu · Enter=menu</span><span class="ht-touch">Tap=select · Tap again / Hold=menu</span></div></div>`;
 
-const mvEl=document.getElementById('mV');
-mvEl.classList.toggle('no-enter',!!scrollState);
-mvEl.innerHTML=h;
+const dvEl=document.getElementById('dV');dvEl.innerHTML=h;
 // Pop animation on the cell whose mark just changed
 if(lastMarkCell&&lastMarkCell.k===k&&Date.now()-lastMarkCell.t<800){
-  const mkEl=mvEl.querySelector(`td.cc[data-ti="${lastMarkCell.ti}"][data-d="${lastMarkCell.d}"] .mk`);
+  const mkEl=dvEl.querySelector(`td.cc[data-ti="${lastMarkCell.ti}"][data-d="${lastMarkCell.d}"] .mk`);
   if(mkEl)mkEl.classList.add('pop');
   lastMarkCell=null;
 }
 // Scroll month tabs so current month is ~4th from left
 const moTabsEl=document.getElementById('moTabs');
-if(!scrollState&&moTabsEl){const curBtn=moTabsEl.querySelector('.dtab.cur');if(curBtn){const btns=[...moTabsEl.querySelectorAll('.dtab')];const ci=btns.indexOf(curBtn);const target=Math.max(0,ci-3);if(target>0&&btns[target])moTabsEl.scrollLeft=btns[target].offsetLeft-moTabsEl.offsetLeft-8;}}
 const els=[document.getElementById('h_'+k),document.getElementById('b_'+k),document.getElementById('s_'+k)];
 let sy=false;els.forEach(el=>{if(!el)return;el.addEventListener('scroll',()=>{if(sy)return;sy=true;els.forEach(o=>{if(o&&o!==el)o.scrollLeft=el.scrollLeft;});sy=false;updateJT(k);});});
 els.forEach(el=>setupAxisLock(el));
@@ -799,13 +917,13 @@ checkMilestone();
 if(!scrollState){
 // Animate numbers in Tasks view (only on fresh render, not re-render after edit)
 requestAnimationFrame(()=>{
-document.getElementById('mV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
+document.getElementById('dV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
 const ring=document.querySelector('.td-ring-prog');
 if(ring)setTimeout(()=>{ring.style.strokeDashoffset=ring.dataset.final;},80);
 });
 } else {
 // Instant update on re-render
-document.getElementById('mV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=e.dataset.anim||'0';const s=e.dataset.suffix||'';const d=parseInt(e.dataset.dec)||0;e.textContent=(d>0?parseFloat(t).toFixed(d).replace(/\.0$/,''):t)+s;});
+document.getElementById('dV').querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=e.dataset.anim||'0';const s=e.dataset.suffix||'';const d=parseInt(e.dataset.dec)||0;e.textContent=(d>0?parseFloat(t).toFixed(d).replace(/\.0$/,''):t)+s;});
 const ring=document.querySelector('.td-ring-prog');
 if(ring)ring.style.strokeDashoffset=ring.dataset.final;
 }
@@ -875,11 +993,13 @@ c.addEventListener('touchend',function(e){clearTimeout(tL);if(window.__gridLock)
 setSel(ti,d);shDD(el);}});
 }
 function cDt(el){return{k:el.dataset.k,ti:+el.dataset.ti,d:+el.dataset.d};}
-function shDD(el){cDD();cPop();const{k,ti,d}=cDt(el);const dd=document.createElement('div');dd.className='mdd';
+function shDD(el){const{k,ti,d}=cDt(el);
+if(!isInputDay(k,d)){cDD();return;} // 記録タブのグリッドは閲覧専用。入力は「入力」タブから
+cDD();cPop();const dd=document.createElement('div');dd.className='mdd';
 [{t:'double',s:'◎',c:'dd-d'},{t:'single',s:'○',c:'dd-s'},{t:'half',s:'△',c:'dd-h'},{t:'zero',s:'×',c:'dd-z'},{t:'skip',s:'–',c:'dd-na'},{t:null,s:'■',c:'dd-c'}].forEach(o=>{
 const b=document.createElement('button');b.className=o.c;b.textContent=o.s;
 b.onmousedown=e=>{e.stopPropagation();e.preventDefault();};
-b.onclick=e=>{e.stopPropagation();sMk(k,ti,d,o.t);if(o.t)pS(o.t);else pS('clear');if(o.t)spP(el,o.t);showUndoToast(o.t?o.s:null);cDD();scR(k);};
+b.onclick=e=>{e.stopPropagation();sMk(k,ti,d,o.t);if(o.t)pS(o.t);else pS('clear');if(o.t)spP(el,o.t);showUndoToast(o.t?o.s:null);cDD();scP(k,ti,d);};
 dd.appendChild(b);});
 // Fixed positioning on body: avoids clipping by scroll containers and wrapping inside narrow cells
 document.body.appendChild(dd);
@@ -917,6 +1037,86 @@ function oClosePop(e){if(aPop&&!aPop.pop.contains(e.target)&&!e.target.classList
 function cPop(){if(aPop){aPop.pop.remove();aPop=null;}document.removeEventListener('mousedown',oClosePop);document.removeEventListener('touchstart',oClosePop);}
 
 let rTm=null;
+// ============================================================
+// Incremental mark patch — updates only the affected DOM nodes
+// instead of rebuilding the whole month view. This is what makes
+// marking feel instant (no scroll-restore jump, no innerHTML churn).
+// Falls back to a full re-render on any unexpected state.
+// ============================================================
+let chTm=null;
+function scP(k,ti,d){
+  if(cv!=='dashboard'||k!==curMonth){scR(k);return;}
+  try{patchMark(k,ti,d);}catch(err){console.error('patch fallback',err);scR(k);}
+}
+function patchMark(k,ti,d){
+  const md=D[k];const mk=gMk(k,ti,d);
+  const now=new Date();const[y,m]=pK(k);
+  const isCur=now.getFullYear()===y&&now.getMonth()+1===m;
+  // --- 1. the cell itself ---
+  const cell=document.querySelector(`td.cc[data-ti="${ti}"][data-d="${d}"]`);
+  if(!cell)throw new Error('cell not found');
+  const mkClasses=Object.values(MK).map(x=>x.c);
+  cell.classList.remove(...mkClasses);
+  if(mk)cell.classList.add(MK[mk].c);
+  cell.innerHTML=mk?`<span class="mk pop">${MK[mk].s}</span>`:'';
+  // --- 2. score & rate footer for that day ---
+  const stats=gS(k);
+  const srRows=document.querySelectorAll('#s_'+k+' tr.sr');
+  if(srRows.length>=2){
+    const act=md.tasks.filter(t=>isA(t,d));
+    let sc=0;act.forEach(t=>{const mm2=gMk(k,md.tasks.indexOf(t),d);if(mm2!=='skip')sc+=mV(mm2);});
+    const scCell=srRows[0].children[d+1];
+    if(scCell)scCell.textContent=sc>0?sc.toFixed(1).replace(/\.0$/,''):'–';
+    const r=stats.dr[d-1];
+    const rtCell=srRows[1].children[d+1];
+    if(rtCell)rtCell.textContent=r>0?Math.round(r*100)+'%':'–';
+  }
+  // --- 3. hero numbers (current month only) ---
+  const tod=gTod(k);
+  if(tod&&isCur){
+    setNumNow(document.querySelector('.hero-pct b'),tod.pct+'%');
+    const ring=document.querySelector('.hero-prog');
+    if(ring){const C=parseFloat(ring.getAttribute('stroke-dasharray'));ring.style.strokeDashoffset=(C*(1-tod.pct/100)).toFixed(2);}
+    let tScore=0;md.tasks.forEach((t,ti2)=>{if(!isA(t,tod.day))return;const mk2=gMk(k,ti2,tod.day);if(mk2!=='skip')tScore+=mV(mk2);});
+    const hns=document.querySelectorAll('.hero-nums .hn b');
+    setNumNow(hns[0],tScore>0?tScore.toFixed(1).replace(/\.0$/,''):'0');
+    setNumNow(hns[1],tod.marked+'/'+tod.total);
+    const sc2=scanStreaks();
+    setNumNow(document.querySelector('.hero-streak b'),sc2.current);
+    const nb=document.querySelector('.chip-badge b');
+    if(nb&&sc2.next)nb.textContent=(sc2.next-sc2.current)+'d';
+    const mRate=stats.ep>0?Math.round(Math.min(stats.ts/stats.ep,1)*100):0;
+    const chips=document.querySelectorAll('.hero-chips .chip:not(.chip-badge):not(.chip-frz) b');
+    if(chips[0])chips[0].textContent=mRate+'%';
+    if(chips[1])chips[1].textContent=stats.ts.toFixed(1).replace(/\.0$/,'');
+    if(chips[2])chips[2].textContent=stats.dr.filter(r2=>r2>0).length+'d';
+    const mBest=stats.dr.reduce((b,r2)=>r2>b?r2:b,0);
+    if(chips[3])chips[3].textContent=mBest>0?Math.round(mBest*100)+'%':'–';
+    // --- 4. quick check row + badge ---
+    const qBtns=document.querySelectorAll(`.qp-mk[onclick*="'${k}',${ti},"]`);
+    const onMap={double:'on-d',single:'on-s',half:'on-h',zero:'on-z'};
+    const syms=['double','single','half','zero'];
+    qBtns.forEach((b,i)=>{b.classList.remove('on-d','on-s','on-h','on-z');if(mk===syms[i])b.classList.add(onMap[mk]);});
+    if(qBtns[0]){const row=qBtns[0].closest('.qp-row');if(row)row.classList.toggle('qp-done',!!mk);}
+    const rem=document.querySelector('.qp-rem');
+    if(rem){rem.textContent=tod.rem===0?'All done':tod.rem+' left';rem.classList.toggle('done',tod.rem===0);}
+    const qpBody=document.querySelector('.qp-body');
+    if(qpBody){
+      const doneMsg=[...qpBody.querySelectorAll('.qp-all')].find(el2=>el2.textContent.includes('great job'));
+      if(tod.rem===0&&!doneMsg){
+        const el2=document.createElement('div');el2.className='qp-all';el2.textContent='All tasks marked — great job!';
+        const addRow=qpBody.querySelector('.qp-add');
+        qpBody.insertBefore(el2,addRow||null);
+      }else if(tod.rem>0&&doneMsg)doneMsg.remove();
+    }
+    checkCeleb(tod);
+    checkMilestone();
+  }
+  // --- 5. chart redraw (throttled) ---
+  clearTimeout(chTm);
+  chTm=setTimeout(()=>{try{drCh(k,gS(k));}catch(e){}},250);
+  setSync(syncState);
+}
 function scR(k){
   clearTimeout(rTm);
   rTm=setTimeout(()=>{
@@ -1117,12 +1317,12 @@ function tQP(){const el=document.getElementById('qp');if(!el)return;el.classList
 function qpAdd(k){
   const inp=document.getElementById('qpNewTask');if(!inp)return;
   const name=inp.value.trim();if(!name)return;
-  const[y,m]=pK(k);const now=new Date();
+  const[y,m]=pK(k);const now=logicalNow();
   let ad=1;if(now.getFullYear()===y&&now.getMonth()+1===m)ad=now.getDate();
   D[k].tasks.push({name,periods:[{from:ad,to:null}],history:[]});
   syncToFuture(k,'add',{name});
   save();pS('single');
-  scR(k);
+  rCur();
   setTimeout(()=>{const ni=document.getElementById('qpNewTask');if(ni)ni.focus();},200);
 }
 function tGrid(){
@@ -1147,7 +1347,7 @@ function qpMk(e,k,ti,d,t){
   sMk(k,ti,d,nw);
   if(nw){pS(nw);spP(e.currentTarget,nw);}else pS('clear');
   showUndoToast(nw?{double:'◎',single:'○',half:'△',zero:'×'}[nw]:null);
-  scR(k);
+  scP(k,ti,d);
 }
 function fireConfetti(){
   const dk=document.documentElement.dataset.theme==='dark';
@@ -1170,6 +1370,28 @@ function checkMilestone(){
   try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1');}catch(e){return;}
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches){fireConfetti();setTimeout(fireConfetti,700);}
   showMilestone(cur);
+}
+function showOnboarding(){
+  const ov=document.createElement('div');ov.className='ob';ov.id='obPop';
+  ov.innerHTML=`<div class="ob-card">
+    <svg class="ob-logo" viewBox="0 0 64 64" fill="none">
+      <path d="M8 56h10V46h10V36h9" stroke="currentColor" opacity=".55" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 58C30 58 44 46 46 24" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M46 2l3.6 6.9L56.5 12.5l-6.9 3.6L46 23l-3.6-6.9L35.5 12.5l6.9-3.6z" fill="currentColor"/>
+    </svg>
+    <div class="ob-title">KISEKIへようこそ</div>
+    <div class="ob-sub">毎日の積み重ねを、軌跡に。</div>
+    <div class="ob-steps">
+      <div class="ob-step"><span class="ob-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span><b>習慣を登録</b><s>「新しいタスクを追加…」から続けたいことを登録</s></span></div>
+      <div class="ob-step"><span class="ob-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg></span><span><b>ワンタップで記録</b><s>◎ ○ △ × をタップするだけ。毎日1分で完了</s></span></div>
+      <div class="ob-step"><span class="ob-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2c.5 2.9 2 4.7 3.6 6.5 1.7 1.9 3.4 4 3.4 6.9a7 7 0 0 1-14 0c0-2.1 1-4 2.2-5.6.4 1.4 1.2 2.5 2.3 3.1-.7-3.4.3-7.7 2.5-10.9z"/></svg></span><span><b>軌跡を積み上げる</b><s>ストリークとバッジで継続が見える・楽しくなる</s></span></div>
+    </div>
+    <button class="ob-cta" id="obStart">はじめる</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const done=()=>{try{localStorage.setItem('dt_ob','1');}catch(e){}ov.remove();const inp=document.getElementById('qpNewTask');if(inp)inp.focus();};
+  document.getElementById('obStart').onclick=done;
+  ov.addEventListener('click',e=>{if(e.target===ov)done();});
 }
 function showMilestone(n){
   const ov=document.createElement('div');ov.className='ms-pop';
@@ -1202,7 +1424,7 @@ function jumpToday(){
 }
 function updateJT(k){
   const jt=document.getElementById('jt');if(!jt)return;
-  if(cv!=='tasks'){jt.classList.remove('show');return;}
+  if(cv!=='dashboard'){jt.classList.remove('show');return;}
   const t=todayScrollTarget(k);
   if(!t){jt.classList.remove('show');return;}
   const{hw,tcTh,stickyW}=t;
@@ -1233,7 +1455,9 @@ function setupTilt(root){
 let dashTaskMonth=null;
 function animateNum(el,target,duration=600){
 const start=performance.now();const dec=parseInt(el.dataset.dec)||0;
+el._animTok=(el._animTok||0)+1;const tok=el._animTok;
 const step=(now)=>{
+if(el._animTok!==tok)return; // superseded by a direct value set (patch)
 const p=Math.min((now-start)/duration,1);
 const ease=1-Math.pow(1-p,3);
 const v=dec>0?(ease*target).toFixed(dec).replace(/\.0$/,''):Math.round(ease*target);
@@ -1243,6 +1467,7 @@ if(p<1)requestAnimationFrame(step);
 };
 requestAnimationFrame(step);
 }
+function setNumNow(el,text){if(!el)return;el._animTok=(el._animTok||0)+1;el.textContent=text;}
 let typeTimer=null;
 function typeText(el,text,speed=8){
   clearInterval(typeTimer);el.textContent='';el.classList.add('typing');
@@ -1271,7 +1496,7 @@ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"${g
 // Dashboard rendering
 // ============================================================
 function rDash(){
-  const el=document.getElementById('dV');const now=new Date();
+  const el=document.getElementById('aV');const now=logicalNow();
   const curK=K(now.getFullYear(),now.getMonth()+1);
   if(!dashTaskMonth)dashTaskMonth=curK;
 let tS=0,tEP=0;const all=MS.map(({y,m})=>{const k=K(y,m);iM(k);const s=gS(k);tS+=s.ts;tEP+=s.ep;return{k,y,m,mo:MN[m],stats:s};});
@@ -1509,7 +1734,7 @@ function rDashTask(){
 }
 
 const THM_SUN=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M4.4 4.4l1.8 1.8M17.8 17.8l1.8 1.8M2.5 12H5M19 12h2.5M4.4 19.6l1.8-1.8M17.8 6.2l1.8-1.8"/></svg>`,THM_MOON=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>`;
-function tTh(){const h=document.documentElement,c=h.dataset.theme,n=c==='dark'?'light':'dark';h.dataset.theme=n;document.getElementById('tb').innerHTML=n==='dark'?THM_SUN:THM_MOON;try{localStorage.setItem('th8',n);}catch(e){}updateThemeColorMeta();if(cv==='tasks'&&curMonth)setTimeout(()=>drCh(curMonth,gS(curMonth)),50);}
+function tTh(){const h=document.documentElement,c=h.dataset.theme,n=c==='dark'?'light':'dark';h.dataset.theme=n;document.getElementById('tb').innerHTML=n==='dark'?THM_SUN:THM_MOON;try{localStorage.setItem('th8',n);}catch(e){}updateThemeColorMeta();if(cv==='dashboard'&&curMonth)setTimeout(()=>drCh(curMonth,gS(curMonth)),50);}
 function lTh(){try{if(!localStorage.getItem('dt_neon')){localStorage.setItem('dt_neon','1');localStorage.setItem('th8','dark');}const t=localStorage.getItem('th8');if(t){document.documentElement.dataset.theme=t;document.getElementById('tb').innerHTML=t==='dark'?THM_SUN:THM_MOON;}}catch(e){}}
 
 // ============================================================
@@ -1529,7 +1754,7 @@ function setAccent(id){
   updateThemeColorMeta();
   cAccPop();
   // Re-render so canvas charts pick up new CSS colors
-  if(cv==='dashboard')rDash();else if(curMonth){iM(curMonth);rMo(curMonth);}
+  if(cv==='analytics')rDash();else if(cv==='dashboard'&&curMonth){iM(curMonth);rBoard(curMonth);}else rToday();
   rNav();
 }
 function lAccent(){try{const a=localStorage.getItem('dt_accent');if(a&&a!=='green'&&ACCENTS.some(x=>x.id===a))document.documentElement.dataset.accent=a;}catch(e){}updateThemeColorMeta();}
@@ -1597,14 +1822,15 @@ if(!dk){
   dk=best||K(MS[0].y,MS[0].m);
 }
 curMonth=dk;
-try{const st=localStorage.getItem('tab8');if(st==='dashboard'||st==='tasks')cv=st;else cv='tasks';}catch(e){cv='tasks';}
+try{const st=localStorage.getItem('tab8');const map={tasks:'today',today:'today',dashboard:'dashboard',analytics:'analytics'};cv=map[st]||'today';}catch(e){cv='today';}
 rNav();sw(cv);setTimeout(initSel,100);window.scrollTo(0,0);
 window.__appReady=true;
 updateCloudBtn();
+try{if(!localStorage.getItem('dt_ob')&&!hasMarks(D))setTimeout(showOnboarding,600);}catch(e){}
 setSync(window.CLOUD&&CLOUD.user?'syncing':'local');
 }
 initApp();
-addEventListener('resize',()=>{rC();if(cv==='tasks'&&curMonth)drCh(curMonth,gS(curMonth));});
+addEventListener('resize',()=>{rC();if(cv==='dashboard'&&curMonth)drCh(curMonth,gS(curMonth));});
 // Cell selection state
 let selTi=null,selD=null,selEndTi=null,selEndD=null,clipBuf=null;
 function clsSel(){document.querySelectorAll('td.cc.sel,td.cc.ssel').forEach(el=>el.classList.remove('sel','ssel'));document.querySelectorAll('tr.sel-row').forEach(el=>el.classList.remove('sel-row'));selTi=null;selD=null;selEndTi=null;selEndD=null;}
@@ -1647,7 +1873,7 @@ function setSel(ti,d){
   if(el)el.scrollIntoView({block:'nearest',inline:'nearest'});
 }
 function initSel(){
-  if(cv!=='tasks'||!curMonth)return;
+  if(cv!=='dashboard'||!curMonth)return;
   const md=D[curMonth];if(!md)return;
   const[y,m]=pK(curMonth);const n=new Date();
   const td=(n.getFullYear()===y&&n.getMonth()+1===m)?n.getDate():1;
@@ -1684,18 +1910,19 @@ function kbConfirmDD(){
 document.addEventListener('keydown',function(e){
   // Cmd+Left/Right: if cell selected in tasks view, do spreadsheet jump; otherwise switch tab
   if(e.metaKey&&!e.ctrlKey&&!e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
-    if(cv==='tasks'&&selTi!==null&&selD!==null){/* fall through to cell navigation below */}
+    if(cv==='dashboard'&&selTi!==null&&selD!==null){/* fall through to cell navigation below */}
     else{e.preventDefault();
-    if(e.key==='ArrowLeft'&&cv==='dashboard')sw('tasks');
-    else if(e.key==='ArrowRight'&&cv==='tasks')sw('dashboard');
+    const ti=TABS.findIndex(t=>t[0]===cv);
+    if(e.key==='ArrowLeft'&&ti>0)sw(TABS[ti-1][0]);
+    else if(e.key==='ArrowRight'&&ti<TABS.length-1)sw(TABS[ti+1][0]);
     return;}
   }
   // Cmd+Up/Down: let fall through to cell navigation when cell selected
   if(e.metaKey&&!e.ctrlKey&&!e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){
-    if(cv==='tasks'&&selTi!==null&&selD!==null){/* fall through */}
+    if(cv==='dashboard'&&selTi!==null&&selD!==null){/* fall through */}
     else return;
   }
-  if(cv!=='tasks')return;
+  if(cv!=='dashboard')return;
   // Cmd+Z: undo, Cmd+Shift+Z: redo
   if(e.metaKey&&e.key==='z'&&!e.ctrlKey){e.preventDefault();if(e.shiftKey)redoMk();else undoMk();return;}
   // Cmd+C: copy selection

@@ -713,21 +713,31 @@ h+=`<div class="hero">
 </div>`;
 
 
-// 当日タスクの入力カード(単一チェックボタン)
-h+=`<div class="today-list">`;
-let rows=0;
+// 当日タスクの入力カード(未完了=上、完了=下)
+h+=`<div class="today-list" id="todayList">`;
+let pend=0,doneCount=0;
+let pendHtml='',doneHtml='';
 md.tasks.forEach((task,ti)=>{
   if(isDeleted(task)||!isA(task,tod.day))return;
   const cm=gMk(k,ti,tod.day);
   if(cm==='skip')return;
-  rows++;
   const done=cm!==null&&cm!=='zero';
-  h+=`<button class="tcard${done?' done':''}" onclick="todayToggle('${k}',${ti},${tod.day})">
-    <span class="tcard-name">${esc(task.name)}</span>
-    <span class="tcard-check">${done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':''}</span>
-  </button>`;
+  const cardEditable=`<span class="tcard-tools"><span class="tcard-edit" onclick="event.stopPropagation();todayEdit('${k}',${ti})" title="名前を変更"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><span class="tcard-del" onclick="event.stopPropagation();todayDel('${k}',${ti})" title="削除"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span></span>`;
+  const row=`<div class="tcard${done?' done':''}" data-ti="${ti}" data-k="${k}" data-d="${tod.day}">
+    <button class="tcard-hit" onclick="todayToggle('${k}',${ti},${tod.day})">
+      <span class="tcard-check">${done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<svg class="tcard-ghost" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'}</span>
+      <input class="tcard-name" value="${esc(task.name)}" data-ti="${ti}" readonly spellcheck="false" onchange="eTinput('${k}',${ti},this)" onblur="this.setAttribute('readonly','')">
+    </button>
+    ${cardEditable}
+  </div>`;
+  if(done){doneCount++;doneHtml+=row;}else{pend++;pendHtml+=row;}
 });
-if(rows===0)h+=`<div class="today-empty">今日のタスクがありません</div>`;
+if(pend===0&&doneCount===0)h+=`<div class="today-empty">今日のタスクがありません。下から追加できます</div>`;
+else{
+  h+=pendHtml;
+  if(pend===0)h+=`<div class="today-alldone">今日のタスクは全て完了しました 🎉</div>`;
+  if(doneCount>0)h+=`<div class="today-divider"><span>完了 ${doneCount}</span></div>`+doneHtml;
+}
 h+=`</div>`;
 // タスク追加
 h+=`<div class="today-add"><input id="qpNewTask" class="qp-add-in" placeholder="新しいタスクを追加..." maxlength="60" onkeydown="if(event.key==='Enter')qpAdd('${k}')"><button class="qp-add-btn" onclick="qpAdd('${k}')" title="Add task">+</button></div>`;
@@ -752,39 +762,56 @@ requestAnimationFrame(()=>{
 function todayToggle(k,ti,d){
   if(!isInputDay(k,d))return;
   const cur=gMk(k,ti,d);
-  const done=cur!==null&&cur!=='zero';
-  sMk(k,ti,d,done?null:'single');
-  pS(done?'clear':'single');
-  patchToday(k,ti,d);
+  const wasDone=cur!==null&&cur!=='zero';
+  sMk(k,ti,d,wasDone?null:'single');
+  pS(wasDone?'clear':'single');
+  const card=document.querySelector(`.tcard[data-ti="${ti}"][data-k="${k}"]`);
+  if(!card){rToday();return;}
+  if(!wasDone){
+    card.classList.add('done','just-checked');
+    const chk=card.querySelector('.tcard-check');
+    if(chk)chk.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+    updateHeroToday(k);
+    setTimeout(()=>{card.classList.add('leaving');},900);
+    setTimeout(()=>{rToday();},1250);
+  }else{
+    rToday();
+  }
 }
-function patchToday(k,ti,d){
+function updateHeroToday(k){
   try{
-    const md=D[k];const mk=gMk(k,ti,d);
-    const done=mk!==null&&mk!=='zero';
-    const btns=document.querySelectorAll('.tcard');
-    // 対象カードを探す(onclick属性で照合)
-    const card=[...btns].find(b=>b.getAttribute('onclick')===`todayToggle('${k}',${ti},${d})`);
-    if(card){
-      card.classList.toggle('done',done);
-      card.querySelector('.tcard-check').innerHTML=done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'';
-    }
-    // ヒーロー更新(patchMarkのヒーロー部分を流用)
-    const tod=gTod(k);const stats=gS(k);
-    if(tod){
-      setNumNow(document.querySelector('.hero-pct b'),tod.pct+'%');
-      const ring=document.querySelector('.hero-prog');
-      if(ring){const C=parseFloat(ring.getAttribute('stroke-dasharray'));ring.style.strokeDashoffset=(C*(1-tod.pct/100)).toFixed(2);}
-      let tScore=0;md.tasks.forEach((t,i2)=>{if(!isA(t,tod.day))return;const m2=gMk(k,i2,tod.day);if(m2!=='skip')tScore+=mV(m2);});
-      const hns=document.querySelectorAll('.hero-nums .hn b');
-      setNumNow(hns[0],tScore>0?tScore.toFixed(1).replace(/\.0$/,''):'0');
-      setNumNow(hns[1],tod.marked+'/'+tod.total);
-      const sc2=scanStreaks();
-      setNumNow(document.querySelector('.hero-streak b'),sc2.current);
-      const nb=document.querySelector('.chip-badge b');if(nb&&sc2.next)nb.textContent=(sc2.next-sc2.current)+'d';
-      checkCeleb(tod);checkMilestone();
-    }
+    const md=D[k];const tod=gTod(k);const stats=gS(k);
+    if(!tod)return;
+    setNumNow(document.querySelector('.hero-pct b'),tod.pct+'%');
+    const ring=document.querySelector('.hero-prog');
+    if(ring){const C=parseFloat(ring.getAttribute('stroke-dasharray'));ring.style.strokeDashoffset=(C*(1-tod.pct/100)).toFixed(2);}
+    let tScore=0;md.tasks.forEach((t,i2)=>{if(!isA(t,tod.day))return;const m2=gMk(k,i2,tod.day);if(m2!=='skip')tScore+=mV(m2);});
+    const hns=document.querySelectorAll('.hero-nums .hn b');
+    setNumNow(hns[0],tScore>0?tScore.toFixed(1).replace(/\.0$/,''):'0');
+    setNumNow(hns[1],tod.marked+'/'+tod.total);
+    const sc2=scanStreaks();
+    setNumNow(document.querySelector('.hero-streak b'),sc2.current);
+    const nb=document.querySelector('.chip-badge b');if(nb&&sc2.next)nb.textContent=(sc2.next-sc2.current)+'d';
+    checkCeleb(tod);checkMilestone();
     setSync(syncState);
-  }catch(e){console.error('patchToday',e);rToday();}
+  }catch(e){console.error('updateHeroToday',e);}
+}
+function todayEdit(k,ti){
+  const card=document.querySelector(`.tcard[data-ti="${ti}"][data-k="${k}"]`);
+  if(!card)return;
+  const inp=card.querySelector('.tcard-name');
+  if(!inp)return;
+  inp.removeAttribute('readonly');inp.focus();inp.select();
+}
+function eTinput(k,ti,inp){
+  const v=inp.value.trim();
+  if(!v){inp.value=D[k].tasks[ti].name;return;}
+  eT(k,ti,v);
+}
+function todayDel(k,ti){
+  const name=(D[k].tasks[ti]&&D[k].tasks[ti].name)||'このタスク';
+  if(!confirm('「'+name+'」を削除しますか?\n(今日以降このタスクは表示されなくなります)'))return;
+  rT(k,ti);
 }
 function rMo(k,scrollState){return rBoard(k,scrollState);} // back-compat alias
 function rCur(){ // 現在のタブを再描画
@@ -824,16 +851,9 @@ sorted.forEach(({t:task,i:idx})=>{
 const del=isDeleted(task);
 const hasHist=task.history&&task.history.length>0;
 h+=`<tr class="${del?'deleted-row':''}" data-idx="${idx}"><td class="tn" data-k="${k}" data-idx="${idx}" ${del?'':`draggable="true" style="cursor:grab"`}>${rowNum++}</td><td class="tname"><div class="tw-inner">`;
-if(del){
-  h+=`<input class="edt" value="${esc(task.name)}" disabled spellcheck="false">`;
-  h+=`<button class="rbtn" onclick="restoreT('${k}',${idx})">Restore</button>`;
-  h+=`<button class="pbtn" onclick="purgeT('${k}',${idx})" title="Permanently delete">🗑</button>`;
-} else {
-  h+=`<input class="edt" value="${esc(task.name)}" onchange="eT('${k}',${idx},this.value)" readonly spellcheck="false">`;
-  h+=`<button class="ebtn" onclick="editTN(this)" title="Edit name">✎</button>`;
-  if(hasHist)h+=`<button class="hbtn" onclick="shHist(event,'${k}',${idx})" title="History">↻</button>`;
-  h+=`<button class="del" onclick="rT('${k}',${idx})">✕</button>`;
-}
+// 記録タブは閲覧専用: タスク名は静的表示、編集/削除は入力タブから
+h+=`<span class="grid-tname${del?' del':''}">${esc(task.name)}</span>`;
+if(hasHist)h+=`<button class="hbtn" onclick="shHist(event,'${k}',${idx})" title="History">↻</button>`;
 h+=`</div></td>`;
 const chgDays=new Set();if(task.history)task.history.forEach(h2=>{if(h2.month===m)chgDays.add(h2.day);});
 for(let d=1;d<=days;d++){const act=isA(task,d),mk=gMk(k,idx,d),isT=d===td;const chg=chgDays.has(d);
@@ -1146,11 +1166,11 @@ function eT(k,ti,v){
   // Skip history for initial naming (empty → name)
   if(oldName){
     if(!task.history)task.history=[];
-    const[y,m]=pK(k);const now=new Date();
+    const[y,m]=pK(k);const now=logicalNow();
     let day=1;if(now.getFullYear()===y&&now.getMonth()+1===m)day=now.getDate();
     task.history.push({day,month:m,oldName,newName:v});
   }
-  task.name=v;syncToFuture(k,'rename',{oldName,newName:v});scR(k);
+  task.name=v;syncToFuture(k,'rename',{oldName,newName:v});rCur();
 }
 
 function aT(k){
@@ -1189,7 +1209,7 @@ function aT(k){
 }
 
 function rT(k,ti){
-  const md=D[k],[y,m]=pK(k);const now=new Date();
+  const md=D[k],[y,m]=pK(k);const now=logicalNow();
   let rd=(now.getFullYear()===y&&now.getMonth()+1===m)?now.getDate():dim(y,m);
   const task=md.tasks[ti];migrateToPeriods(task);
   const last=task.periods[task.periods.length-1];
@@ -1201,7 +1221,7 @@ function rT(k,ti){
       last.to=rd-1;
     }
   }
-  syncToFuture(k,'delete',{name:task.name});rMo(k);
+  syncToFuture(k,'delete',{name:task.name});rCur();
 }
 
 function restoreT(k,ti){

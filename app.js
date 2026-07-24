@@ -32,7 +32,7 @@ function buildMS(data){
   const n=new Date();const ey=n.getFullYear(),em=n.getMonth()+1;
   let endTotal=ey*12+em+12;
   let startTotal=2026*12+2;
-  if(data)Object.keys(data).forEach(k=>{const[y,m]=pK(k);const t=y*12+m;if(t<startTotal)startTotal=t;});
+  if(data)Object.keys(data).forEach(k=>{if(k.startsWith('__'))return;const[y,m]=pK(k);const t=y*12+m;if(t<startTotal)startTotal=t;});
   const curTotal=ey*12+em;
   if(curTotal-startTotal<3)startTotal=curTotal-3;
   const a=[];
@@ -96,6 +96,62 @@ else if(t==='zero'){o.frequency.value=220;o.type='sawtooth';g.gain.value=.05;o.s
 else{o.frequency.value=300;o.type='sine';g.gain.value=.04;o.start();g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.06);o.stop(c.currentTime+.06);}
 }catch(e){}}
 function K(y,m){return`${y}-${String(m).padStart(2,'0')}`;}
+// ===== 気づき(Notes)API =====
+function getNotes(){return (D.__notes&&Array.isArray(D.__notes))?D.__notes:[];}
+function addNote(title,body){
+  if(!D.__notes)D.__notes=[];
+  const now=new Date();
+  const t=logicalToday();
+  const dateStr=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  D.__notes.unshift({id:'n'+now.getTime()+Math.random().toString(36).slice(2,6),ts:now.getTime(),date:dateStr,title:title.trim(),body:(body||'').trim()});
+  save();
+}
+function updateNote(id,title,body){
+  const n=getNotes().find(x=>x.id===id);if(!n)return;
+  n.title=title.trim();n.body=(body||'').trim();n.ts=Date.now();save();
+}
+function delNote(id){
+  if(!D.__notes)return;
+  D.__notes=D.__notes.filter(x=>x.id!==id);save();
+}
+function fmtNoteDate(ds){
+  const[y,m,d]=ds.split('-').map(Number);
+  const wd=['日','月','火','水','木','金','土'][new Date(y,m-1,d).getDay()];
+  return `${m}/${d}(${wd})`;
+}
+function openNoteEditor(id){
+  const editing=id?getNotes().find(n=>n.id===id):null;
+  const ov=document.createElement('div');ov.className='note-ov';ov.id='noteOv';
+  ov.innerHTML=`<div class="note-modal">
+    <div class="note-modal-head">
+      <span>${editing?'気づきを編集':'今日の気づき'}</span>
+      <button class="note-close" onclick="closeNoteEditor()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <input id="noteTitle" class="note-title" placeholder="タイトル(例: 朝活がうまくいった理由)" maxlength="80" value="${editing?esc(editing.title):''}">
+    <textarea id="noteBody" class="note-body" placeholder="詳しい気づきや、後で振り返りたいことを書いておきましょう" rows="6">${editing?esc(editing.body):''}</textarea>
+    <div class="note-actions">
+      ${editing?`<button class="note-del" onclick="confirmDelNote('${editing.id}')">削除</button>`:'<span></span>'}
+      <button class="note-save" onclick="saveNoteFromEditor('${editing?editing.id:''}')">保存</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)closeNoteEditor();});
+  setTimeout(()=>document.getElementById('noteTitle').focus(),50);
+}
+function closeNoteEditor(){const ov=document.getElementById('noteOv');if(ov)ov.remove();}
+function saveNoteFromEditor(id){
+  const title=document.getElementById('noteTitle').value.trim();
+  const body=document.getElementById('noteBody').value;
+  if(!title){document.getElementById('noteTitle').focus();return;}
+  if(id)updateNote(id,title,body);else addNote(title,body);
+  closeNoteEditor();
+  pS('single');
+  rCur();
+}
+function confirmDelNote(id){
+  if(!confirm('この気づきを削除しますか?'))return;
+  delNote(id);closeNoteEditor();rCur();
+}
 function dim(y,m){return new Date(y,m,0).getDate();}
 function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 // --- IndexedDB + localStorage dual storage ---
@@ -741,6 +797,23 @@ else{
 h+=`</div>`;
 // タスク追加
 h+=`<div class="today-add"><input id="qpNewTask" class="qp-add-in" placeholder="新しいタスクを追加..." maxlength="60" onkeydown="if(event.key==='Enter')qpAdd('${k}')"><button class="qp-add-btn" onclick="qpAdd('${k}')" title="Add task">+</button></div>`;
+// ===== 気づきセクション =====
+h+=`<div class="ins-sec">
+  <div class="ins-head"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg><span>今日の気づき</span></div>`;
+const recent=getNotes().slice(0,3);
+h+=`<button class="ins-add-btn" onclick="openNoteEditor()">＋ 気づきを書く</button>`;
+if(recent.length){
+  h+=`<div class="ins-recent">`;
+  recent.forEach(n=>{
+    h+=`<div class="ins-card" onclick="openNoteEditor('${n.id}')">
+      <div class="ins-card-top"><span class="ins-card-title">${esc(n.title||'(無題)')}</span><span class="ins-card-date">${fmtNoteDate(n.date)}</span></div>
+      ${n.body?`<div class="ins-card-body">${esc(n.body)}</div>`:''}
+    </div>`;
+  });
+  h+=`</div>`;
+  if(getNotes().length>3)h+=`<button class="ins-more" onclick="sw('analytics')">過去の気づきをすべて見る (${getNotes().length}件) →</button>`;
+}
+h+=`</div>`;
 }else{
 h+=`<div class="today-empty" style="margin-top:40px">今日のデータを準備中…</div>`;
 }
@@ -820,6 +893,25 @@ function rCur(){ // 現在のタブを再描画
   else rDash();
 }
 
+// 直近14日ぶんの日付配列を作る(今日を最後に。月をまたいでもOK)
+function buildWeekView(kIgnored){
+  const today=logicalToday();
+  const days=[];
+  const DAYS=14;
+  for(let i=DAYS-1;i>=0;i--){
+    const dt=new Date(today.getFullYear(),today.getMonth(),today.getDate()-i);
+    const yy=dt.getFullYear(),mm=dt.getMonth()+1,dd=dt.getDate();
+    const kk=K(yy,mm);
+    if(!D[kk]&&MS.some(x=>K(x.y,x.m)===kk))iM(kk);
+    days.push({
+      k:kk,d:dd,dow:dt.getDay(),
+      wk:dt.getDay()===0||dt.getDay()===6,
+      isToday:i===0,
+      inMonth:!!D[kk]
+    });
+  }
+  return{days};
+}
 function rBoard(k,scrollState){
 const md=D[k],[y,m]=pK(k),days=dim(y,m),stats=gS(k),tod=gTod(k),str=tod?scanStreaks().current:gStr(k);
 const now=new Date(),isCur=now.getFullYear()===y&&now.getMonth()+1===m,td=isCur?now.getDate():-1;
@@ -837,44 +929,41 @@ h+='</div>';
 
 const gridOpen=(()=>{try{return localStorage.getItem('dt_grid')!=='0';}catch(e){return true;}})();
 h+=`<div class="card${gridOpen?'':' closed'}" style="position:relative">`;
-h+=`<button class="card-head" onclick="tGrid()"><span class="qp-title"><svg class="qp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Monthly Grid</span><span class="qp-rem">${MN[m]} ${y}</span><span class="qp-chev">▾</span></button>`;
-h+=`<div class="col-resize-overlay col-resize-pos" id="colResize_${k}"></div>`;
+h+=`<button class="card-head" onclick="tGrid()"><span class="qp-title"><svg class="qp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>直近2週間</span><span class="qp-rem">${MN[m]} ${y}</span><span class="qp-chev">▾</span></button>`;
 h+=`<div class="lgd"><b>Marks</b><span><span class="lm" style="color:var(--mD)">◎</span>1.2</span><span><span class="lm" style="color:var(--mS)">○</span>1.0</span><span><span class="lm" style="color:var(--mH)">△</span>0.5</span><span><span class="lm" style="color:var(--mZ)">×</span>0</span></div>`;
 
-h+=`<div class="hw ss" id="h_${k}"><table class="st"><thead><tr><th>#</th><th>Task</th>`;
-for(let d=1;d<=days;d++){const dt=new Date(y,m-1,d),wk=dt.getDay()===0||dt.getDay()===6,isT=d===td;h+=`<th class="${wk?'wk':''} ${isT?'tc':''}"><span class="dn">${d}</span><span class="dname">${DN[dt.getDay()]}</span></th>`;}
-h+=`</tr></thead></table></div>`;
-
-h+=`<div class="bw ss" id="b_${k}"><table class="st"><tbody>`;
-let rowNum=1;
+// ===== 週ビュー(直近14日) =====
+// 固定列なし。タスクごとに1行、日付タイルを横に並べる。
+const wv=buildWeekView(k);
+h+=`<div class="wv">`;
+// 日付ヘッダー
+h+=`<div class="wv-head"><div class="wv-corner"></div><div class="wv-days">`;
+wv.days.forEach(dd=>{
+  h+=`<div class="wv-dh${dd.isToday?' today':''}${dd.wk?' wk':''}"><span class="wv-dn">${dd.d}</span><span class="wv-dname">${DN[dd.dow]}</span></div>`;
+});
+h+=`</div></div>`;
+// タスク行
 sorted.forEach(({t:task,i:idx})=>{
-const del=isDeleted(task);
-const hasHist=task.history&&task.history.length>0;
-h+=`<tr class="${del?'deleted-row':''}" data-idx="${idx}"><td class="tn" data-k="${k}" data-idx="${idx}" ${del?'':`draggable="true" style="cursor:grab"`}>${rowNum++}</td><td class="tname"><div class="tw-inner">`;
-// 記録タブは閲覧専用: タスク名は静的表示、編集/削除は入力タブから
-h+=`<span class="grid-tname${del?' del':''}">${esc(task.name)}</span>`;
-if(hasHist)h+=`<button class="hbtn" onclick="shHist(event,'${k}',${idx})" title="History">↻</button>`;
-h+=`</div></td>`;
-const chgDays=new Set();if(task.history)task.history.forEach(h2=>{if(h2.month===m)chgDays.add(h2.day);});
-for(let d=1;d<=days;d++){const act=isA(task,d),mk=gMk(k,idx,d),isT=d===td;const chg=chgDays.has(d);
-if(!act)h+=`<td class="cc na${chg?' chg':''}"></td>`;
-else if(del){let cls='cc del-past',co='';if(mk){cls+=` ${MK[mk].c}`;co=`<span class="mk">${MK[mk].s}</span>`;}if(chg)cls+=' chg';
-h+=`<td class="${cls}">${co}</td>`;}
-else{let cls='cc',co='';if(mk){cls+=` ${MK[mk].c}`;co=`<span class="mk">${MK[mk].s}</span>`;}if(isT)cls+=' tc';if(chg)cls+=' chg';
-h+=`<td class="${cls}" data-k="${k}" data-ti="${idx}" data-d="${d}">${co}</td>`;}}
-h+=`</tr>`;});
-
-h+=`<tr class="add-row"><td class="tn"></td><td class="tname" style="border-bottom:none!important;padding-left:8px"><button class="abtn" onclick="aT('${k}')">+ Add Task</button></td>`;
-for(let d=1;d<=days;d++)h+=`<td class="add-cell"></td>`;
-h+=`</tr></tbody></table></div>`;
-
-h+=`<div class="sw ss" id="s_${k}"><table class="st"><tbody>`;
-h+=`<tr class="sr"><td></td><td>Score</td>`;
-for(let d=1;d<=days;d++){const act=md.tasks.filter(t=>isA(t,d));let sc=0;act.forEach(t=>{const mk=gMk(k,md.tasks.indexOf(t),d);if(mk!=='skip')sc+=mV(mk);});h+=`<td>${sc>0?sc.toFixed(1).replace(/\.0$/,''):'–'}</td>`;}
-h+=`</tr><tr class="sr"><td></td><td>Rate</td>`;
-for(let d=1;d<=days;d++){const r=stats.dr[d-1];h+=`<td>${r>0?Math.round(r*100)+'%':'–'}</td>`;}
-h+=`</tr></tbody></table></div>`;
-
+  if(isDeleted(task))return;
+  h+=`<div class="wv-row"><div class="wv-tname" title="${esc(task.name)}">${esc(task.name)}</div><div class="wv-tiles">`;
+  wv.days.forEach(dd=>{
+    if(!dd.inMonth||!isA(task,dd.d)){h+=`<div class="wv-tile na"></div>`;return;}
+    const mk=gMk(dd.k,idx,dd.d);
+    const cls=mk?MK[mk].c:'';
+    const sym=mk?MK[mk].s:'';
+    h+=`<div class="wv-tile ${cls}${dd.isToday?' today':''}">${sym}</div>`;
+  });
+  h+=`</div></div>`;
+});
+// スコア/達成率行
+h+=`<div class="wv-row wv-sr"><div class="wv-tname">Score</div><div class="wv-tiles">`;
+wv.days.forEach(dd=>{
+  if(!dd.inMonth){h+=`<div class="wv-tile na"></div>`;return;}
+  const md2=D[dd.k];let sc=0;if(md2)md2.tasks.forEach((t,ti2)=>{if(!isA(t,dd.d))return;const mk=gMk(dd.k,ti2,dd.d);if(mk!=='skip')sc+=mV(mk);});
+  h+=`<div class="wv-scell${dd.isToday?' today':''}">${sc>0?sc.toFixed(1).replace(/\.0$/,''):'–'}</div>`;
+});
+h+=`</div></div>`;
+h+=`</div>`;
 h+=`<div class="cs">
   <div class="ch">
     <div class="ctt">Daily Progress</div>
@@ -890,46 +979,7 @@ h+=`<div class="cs">
 h+=`<div class="ftr"><button onclick="exC('${k}')">Export CSV</button><button onclick="exportData()">Backup JSON</button><button onclick="importData()">Restore JSON</button><span class="si" id="si">✓ Saved</span><span class="sync-pill" id="syncPill"></span><span class="ht">Click=select · Click again / Dbl / Hold=menu · Enter=menu</span><span class="ht-touch">Tap=select · Tap again / Hold=menu</span></div></div>`;
 
 const dvEl=document.getElementById('dV');dvEl.innerHTML=h;
-// Pop animation on the cell whose mark just changed
-if(lastMarkCell&&lastMarkCell.k===k&&Date.now()-lastMarkCell.t<800){
-  const mkEl=dvEl.querySelector(`td.cc[data-ti="${lastMarkCell.ti}"][data-d="${lastMarkCell.d}"] .mk`);
-  if(mkEl)mkEl.classList.add('pop');
-  lastMarkCell=null;
-}
-// Scroll month tabs so current month is ~4th from left
-const moTabsEl=document.getElementById('moTabs');
-const els=[document.getElementById('h_'+k),document.getElementById('b_'+k),document.getElementById('s_'+k)];
-let sy=false;els.forEach(el=>{if(!el)return;el.addEventListener('scroll',()=>{if(sy)return;sy=true;els.forEach(o=>{if(o&&o!==el)o.scrollLeft=el.scrollLeft;});sy=false;updateJT(k);});});
-els.forEach(el=>setupAxisLock(el));
-requestAnimationFrame(()=>updateJT(k));
 setSync(syncState);
-const bEl=document.getElementById('b_'+k);if(bEl)setupCE(bEl,k);
-setupColResize(k);
-// Auto-scroll so today's column is visible just right of the sticky task column (fresh render only)
-if(!scrollState&&td>0){
-  requestAnimationFrame(()=>{
-    const hw3=document.getElementById('h_'+k);if(!hw3)return;
-    const tcTh=hw3.querySelector('th.tc');if(!tcTh)return;
-    const stickyW=tcTh.offsetParent?parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--colNum'))+parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--colTask')):0;
-    const dayW=tcTh.offsetWidth;
-    // Show up to 2 previous days for context
-    const target=Math.max(0,tcTh.offsetLeft-stickyW-dayW*2);
-    [hw3,document.getElementById('b_'+k),document.getElementById('s_'+k)].forEach(el=>{if(el)el.scrollLeft=target;});
-  });
-}
-if(scrollState){
-  requestAnimationFrame(()=>{
-    const bw2=document.getElementById('b_'+k);
-    const hw2=document.getElementById('h_'+k);
-    const sw2=document.getElementById('s_'+k);
-    const mt2=document.getElementById('moTabs');
-    if(bw2){bw2.scrollTop=scrollState.by;bw2.scrollLeft=scrollState.bx;}
-    if(hw2)hw2.scrollLeft=scrollState.hx||scrollState.bx;
-    if(sw2)sw2.scrollLeft=scrollState.hx||scrollState.bx;
-    if(mt2)mt2.scrollLeft=scrollState.mx;
-    window.scrollTo(0,scrollState.py);
-  });
-}
 requestAnimationFrame(()=>{
 drCh(k,stats);
 checkCeleb(tod);
@@ -1443,13 +1493,7 @@ function jumpToday(){
   [t.hw,document.getElementById('b_'+k),document.getElementById('s_'+k)].forEach(el=>{if(el)el.scrollTo({left:t.target,behavior:'smooth'});});
 }
 function updateJT(k){
-  const jt=document.getElementById('jt');if(!jt)return;
-  if(cv!=='dashboard'){jt.classList.remove('show');return;}
-  const t=todayScrollTarget(k);
-  if(!t){jt.classList.remove('show');return;}
-  const{hw,tcTh,stickyW}=t;
-  const vis=tcTh.offsetLeft+tcTh.offsetWidth>hw.scrollLeft+stickyW&&tcTh.offsetLeft<hw.scrollLeft+hw.clientWidth;
-  jt.classList.toggle('show',!vis);
+  const jt=document.getElementById('jt');if(jt)jt.classList.remove('show');
 }
 // 3D tilt for dashboard stat cards (hover devices only)
 function setupTilt(root){
@@ -1689,6 +1733,21 @@ all.filter(a=>D[a.k]).forEach(({k,mo,y})=>{
 });
 h+=`</div><div id="dashTaskContent"></div></div>`;
 h+=`</div>`;
+// ===== 過去の気づき一覧 =====
+const allNotes=getNotes();
+if(allNotes.length){
+  h+=`<div class="dh-section"><div class="dh-title">気づきの記録 (${allNotes.length})</div><div class="notes-list">`;
+  allNotes.forEach(n=>{
+    h+=`<div class="note-item" onclick="openNoteEditor('${n.id}')">
+      <div class="note-item-date">${fmtNoteDate(n.date)}</div>
+      <div class="note-item-main">
+        <div class="note-item-title">${esc(n.title||'(無題)')}</div>
+        ${n.body?`<div class="note-item-body">${esc(n.body)}</div>`:''}
+      </div>
+    </div>`;
+  });
+  h+=`</div></div>`;
+}
 el.innerHTML=h;
 rDashTask();
 setupTilt(el);

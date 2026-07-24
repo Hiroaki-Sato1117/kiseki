@@ -1,0 +1,8 @@
+# ローカル設定(VAPIDキー等) — Git管理しない
+config.js
+
+# 秘密鍵は絶対にコミットしない
+*serviceAccount*.json
+*firebase-adminsdk*.json
+.env
+.DS_Store

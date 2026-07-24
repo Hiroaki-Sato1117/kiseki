@@ -1,5 +1,5 @@
 // KISEKI Service Worker — offline-first app shell + runtime font caching
-const VERSION = 'kiseki-v19';
+const VERSION = 'kiseki-v21';
 const SHELL = [
   './',
   './index.html',
@@ -31,6 +31,12 @@ self.addEventListener('fetch', e => {
 
   // Firestore/Auth realtime channels: always network (never cache)
   if (url.hostname === 'firestore.googleapis.com' || url.hostname === 'identitytoolkit.googleapis.com' || url.hostname === 'securetoken.googleapis.com') return;
+
+  // Local config (VAPID key): always try network first, fall back to cache offline; never precache
+  if (url.origin === location.origin && url.pathname.endsWith('/config.js')) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
 
   // Google Fonts & Firebase SDK: stale-while-revalidate
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com' || url.hostname === 'www.gstatic.com') {

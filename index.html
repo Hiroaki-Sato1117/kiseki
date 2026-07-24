@@ -28,10 +28,11 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "333142166065",
   appId: "1:333142166065:web:016c0656105440fd8c6310"
 };
-// 通知リマインダー用: Firebaseコンソール → プロジェクトの設定 → Cloud Messaging
-// → 「ウェブプッシュ証明書」→ 鍵ペアを生成 → 公開鍵をここに貼り付け
-window.FIREBASE_VAPID_KEY = "PASTE_YOUR_VAPID_PUBLIC_KEY";
+// 通知リマインダー用の VAPID 公開鍵は config.js に置きます。
+// config.js は .gitignore で除外されるため、push しても消えません。
+window.FIREBASE_VAPID_KEY = "";
 </script>
+<script src="config.js" onerror="void 0"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>

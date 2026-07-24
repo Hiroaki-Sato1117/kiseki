@@ -60,7 +60,7 @@ service cloud.firestore {
 
 未記入の日だけ、選んだ時刻(19〜23時)にプッシュ通知が届きます。送信はGitHub Actions(無料)が毎時行います。
 
-1. **VAPIDキー**: Firebaseコンソール → プロジェクトの設定 → **Cloud Messaging** タブ → 「ウェブプッシュ証明書」→ **鍵ペアを生成** → 公開鍵をコピーし、`index.html` の `FIREBASE_VAPID_KEY` に貼り付け(絶対にサービスアカウントJSONを貼らないこと — 別物です)
+1. **VAPIDキー**: Firebaseコンソール → プロジェクトの設定 → **Cloud Messaging** タブ → 「ウェブプッシュ証明書」→ **鍵ペアを生成** → 公開鍵をコピー。プロジェクト直下に `config.js` を作り(`cp config.example.js config.js`)、その中の `FIREBASE_VAPID_KEY` に貼り付け。**config.js は .gitignore で除外されるので、アプリを更新(zipを丸ごと上書き)してもキーは消えず、Gitにも公開されません**(絶対にサービスアカウントJSONを貼らないこと — 別物です)
 2. **サービスアカウント**: プロジェクトの設定 → **サービスアカウント** タブ → **新しい秘密鍵の生成** → JSONをダウンロード
 3. **GitHub Secret**: リポジトリの Settings → Secrets and variables → **Actions** → New repository secret → Name: `FIREBASE_SERVICE_ACCOUNT`、Value: JSONファイルの中身を丸ごと貼り付け(このJSONはリポジトリには絶対に含めないこと)
 4. push後、アプリの☁ポップオーバーで**時刻(時:分)を自由に指定**して通知を**ON**に

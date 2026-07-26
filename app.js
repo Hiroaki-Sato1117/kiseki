@@ -769,30 +769,46 @@ h+=`<div class="hero">
 </div>`;
 
 
-// 当日タスクの入力カード(未完了=上、完了=下)
+// 当日タスクの入力カード(未完了=上、完了=中、失敗=下)
+// 入力: 右スワイプ=○成功 / 左スワイプ=×失敗
 h+=`<div class="today-list" id="todayList">`;
-let pend=0,doneCount=0;
-let pendHtml='',doneHtml='';
+let pend=0,doneCount=0,failCount=0;
+let pendHtml='',doneHtml='',failHtml='';
 md.tasks.forEach((task,ti)=>{
   if(isDeleted(task)||!isA(task,tod.day))return;
   const cm=gMk(k,ti,tod.day);
   if(cm==='skip')return;
-  const done=cm!==null&&cm!=='zero';
+  const isDone=cm!==null&&cm!=='zero';
+  const isFail=cm==='zero';
+  const state=isDone?'done':(isFail?'fail':'pend');
   const cardEditable=`<span class="tcard-tools"><span class="tcard-edit" onclick="event.stopPropagation();todayEdit('${k}',${ti})" title="名前を変更"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><span class="tcard-del" onclick="event.stopPropagation();todayDel('${k}',${ti})" title="削除"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span></span>`;
-  const row=`<div class="tcard${done?' done':''}" data-ti="${ti}" data-k="${k}" data-d="${tod.day}">
-    <button class="tcard-hit" onclick="todayToggle('${k}',${ti},${tod.day})">
-      <span class="tcard-check">${done?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<svg class="tcard-ghost" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'}</span>
-      <input class="tcard-name" value="${esc(task.name)}" data-ti="${ti}" readonly spellcheck="false" onchange="eTinput('${k}',${ti},this)" onblur="this.setAttribute('readonly','')">
-    </button>
-    ${cardEditable}
+  const stateIcon=isDone
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+    : (isFail
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+      : '');
+  const row=`<div class="tcard tc-${state}" data-ti="${ti}" data-k="${k}" data-d="${tod.day}">
+    <div class="tcard-swipe">
+      <span class="tcard-bg tcard-bg-ok"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+      <span class="tcard-bg tcard-bg-ng"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+      <div class="tcard-fg">
+        <span class="tcard-state">${stateIcon}</span>
+        <input class="tcard-name" value="${esc(task.name)}" data-ti="${ti}" readonly spellcheck="false" onchange="eTinput('${k}',${ti},this)" onblur="this.setAttribute('readonly','')">
+        ${cardEditable}
+      </div>
+    </div>
   </div>`;
-  if(done){doneCount++;doneHtml+=row;}else{pend++;pendHtml+=row;}
+  if(isDone){doneCount++;doneHtml+=row;}
+  else if(isFail){failCount++;failHtml+=row;}
+  else{pend++;pendHtml+=row;}
 });
-if(pend===0&&doneCount===0)h+=`<div class="today-empty">今日のタスクがありません。下から追加できます</div>`;
+if(pend===0&&doneCount===0&&failCount===0)h+=`<div class="today-empty">今日のタスクがありません。下から追加できます</div>`;
 else{
+  if(pend>0)h+=`<div class="today-hint">→ 右スワイプで成功 ○　←　左スワイプで失敗 ×</div>`;
   h+=pendHtml;
-  if(pend===0)h+=`<div class="today-alldone">今日のタスクは全て完了しました 🎉</div>`;
-  if(doneCount>0)h+=`<div class="today-divider"><span>完了 ${doneCount}</span></div>`+doneHtml;
+  if(pend===0)h+=`<div class="today-alldone">今日のタスクは全て記録しました 🎉</div>`;
+  if(doneCount>0)h+=`<div class="today-divider tdv-ok"><span>完了 ${doneCount}</span></div>`+doneHtml;
+  if(failCount>0)h+=`<div class="today-divider tdv-ng"><span>失敗 ${failCount}</span></div>`+failHtml;
 }
 h+=`</div>`;
 // タスク追加
@@ -822,6 +838,7 @@ mvEl.className='mv active';
 mvEl.innerHTML=h;
 requestAnimationFrame(()=>{
   drCh&&0; // noop
+  setupSwipeCards();
   if(tod){
     mvEl.querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
     const ring=document.querySelector('.td-ring-prog');
@@ -831,25 +848,74 @@ requestAnimationFrame(()=>{
   setSync(syncState);
 });
 }
-// 入力タブ: 単一チェックのトグル(○ ⇔ 解除)
-function todayToggle(k,ti,d){
+// 入力タブ: マークを設定(right=○ / left=×)。同じ状態なら解除。
+function todaySet(k,ti,d,mark){
   if(!isInputDay(k,d))return;
   const cur=gMk(k,ti,d);
-  const wasDone=cur!==null&&cur!=='zero';
-  sMk(k,ti,d,wasDone?null:'single');
-  pS(wasDone?'clear':'single');
+  const target=(cur===mark)?null:mark; // 同じ操作の再実行で解除
+  sMk(k,ti,d,target);
+  pS(target==='single'?'single':(target==='zero'?'half':'clear'));
   const card=document.querySelector(`.tcard[data-ti="${ti}"][data-k="${k}"]`);
   if(!card){rToday();return;}
-  if(!wasDone){
-    card.classList.add('done','just-checked');
-    const chk=card.querySelector('.tcard-check');
-    if(chk)chk.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
-    updateHeroToday(k);
-    setTimeout(()=>{card.classList.add('leaving');},900);
-    setTimeout(()=>{rToday();},1250);
+  updateHeroToday(k);
+  if(target){
+    // ○or×が付いた → 対応セクションへ移動アニメ
+    card.classList.add(target==='single'?'flash-ok':'flash-ng');
+    setTimeout(()=>{card.classList.add(target==='single'?'leaving-right':'leaving-left');},650);
+    setTimeout(()=>{rToday();},1000);
   }else{
     rToday();
   }
+}
+// スワイプ操作のセットアップ
+function setupSwipeCards(){
+  document.querySelectorAll('#mV .tcard').forEach(card=>{
+    const fg=card.querySelector('.tcard-fg');if(!fg)return;
+    const k=card.dataset.k,ti=parseInt(card.dataset.ti),d=parseInt(card.dataset.d);
+    let sx=0,sy=0,dx=0,active=false,decided=false,horiz=false;
+    const THRESH=90; // これ以上動かしたら確定
+    const onStart=e=>{
+      const t=e.touches?e.touches[0]:e;
+      sx=t.clientX;sy=t.clientY;dx=0;active=true;decided=false;horiz=false;
+      fg.style.transition='none';
+    };
+    const onMove=e=>{
+      if(!active)return;
+      const t=e.touches?e.touches[0]:e;
+      dx=t.clientX-sx;const dy=t.clientY-sy;
+      if(!decided){
+        if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
+        horiz=Math.abs(dx)>Math.abs(dy);decided=true;
+        if(!horiz){active=false;fg.style.transition='';return;}
+      }
+      if(horiz){
+        if(e.cancelable)e.preventDefault();
+        fg.style.transform=`translateX(${dx}px)`;
+        card.classList.toggle('swiping-ok',dx>30);
+        card.classList.toggle('swiping-ng',dx<-30);
+      }
+    };
+    const onEnd=()=>{
+      if(!active&&!decided){return;}
+      active=false;
+      card.classList.remove('swiping-ok','swiping-ng');
+      fg.style.transition='';
+      if(horiz&&Math.abs(dx)>=THRESH){
+        fg.style.transform='';
+        todaySet(k,ti,d,dx>0?'single':'zero');
+      }else{
+        fg.style.transform='';
+      }
+    };
+    fg.addEventListener('touchstart',onStart,{passive:true});
+    fg.addEventListener('touchmove',onMove,{passive:false});
+    fg.addEventListener('touchend',onEnd);
+    fg.addEventListener('touchcancel',onEnd);
+    // マウス(PC)対応: ドラッグで左右
+    fg.addEventListener('mousedown',e=>{if(e.target.closest('.tcard-tools')||e.target.closest('input:not([readonly])'))return;onStart(e);
+      const mm=ev=>onMove(ev),mu=()=>{onEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+      document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});
+  });
 }
 function updateHeroToday(k){
   try{

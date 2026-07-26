@@ -484,14 +484,14 @@ color:var(--mS);opacity:.3;font-weight:800;pointer-events:none;}
 .dh-section{margin-bottom:10px;}
 }
 /* ===== Aurora ambient background ===== */
-.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
+.aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;animation:hueDrift 24s ease-in-out infinite;}
 .aurora span{position:absolute;border-radius:50%;filter:blur(70px);will-change:transform;}
 .aurora .a1{width:55vmax;height:55vmax;left:-15vmax;top:-18vmax;background:radial-gradient(circle,var(--aur1),transparent 65%);animation:aur1 26s ease-in-out infinite alternate;}
 .aurora .a2{width:48vmax;height:48vmax;right:-16vmax;top:20vh;background:radial-gradient(circle,var(--aur2),transparent 65%);animation:aur2 34s ease-in-out infinite alternate;}
 .aurora .a3{width:42vmax;height:42vmax;left:24vw;bottom:-20vmax;background:radial-gradient(circle,var(--aur3),transparent 65%);animation:aur3 40s ease-in-out infinite alternate;}
-@keyframes aur1{to{transform:translate(9vw,7vh) scale(1.15);}}
-@keyframes aur2{to{transform:translate(-8vw,-6vh) scale(1.2);}}
-@keyframes aur3{to{transform:translate(-6vw,-9vh) scale(1.1);}}
+@keyframes aur1{to{transform:translate(11vw,9vh) scale(1.25) rotate(8deg);}}
+@keyframes aur2{to{transform:translate(-10vw,-8vh) scale(1.3) rotate(-10deg);}}
+@keyframes aur3{to{transform:translate(-8vw,-11vh) scale(1.22) rotate(6deg);}}
 /* ===== Touch optimization ===== */
 button,.dtab,.ntab,.tbtn,.kbtn,td.cc,.qp-mk,.qp-head,.jt,.bnav button{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 /* ===== Mobile bottom nav ===== */
@@ -867,6 +867,64 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 .today-alldone{text-align:center;color:var(--accent);font-size:14px;font-weight:700;padding:20px 0;}
 .today-empty{text-align:center;color:var(--text3);font-size:14px;padding:30px 0;}
 .today-add{display:flex;gap:8px;margin-top:16px;}
+/* ============================================================
+   Animated gradients — living, flowing color
+   ============================================================ */
+@keyframes gradShift{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+@keyframes gradRotate{to{transform:rotate(360deg);}}
+@keyframes hueDrift{0%,100%{filter:hue-rotate(0deg);}50%{filter:hue-rotate(18deg);}}
+@keyframes borderFlow{0%{background-position:0% 50%;}100%{background-position:200% 50%;}}
+
+/* Flowing text gradient — apply where numbers/titles use accent gradient */
+.hero-pct b,.hn:not(.diff) b,.hero-streak b,.ms-n,.badge.got b{
+  background:linear-gradient(120deg,var(--accent),var(--accent2),var(--accent));
+  background-size:200% auto;
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  animation:gradShift 6s ease infinite;
+}
+
+/* Hero ring: animated conic sheen behind the SVG ring */
+.hero-ring::before{
+  content:'';position:absolute;inset:-8px;border-radius:50%;z-index:-1;
+  background:conic-gradient(from 0deg,transparent 0deg,color-mix(in srgb,var(--accent) 35%,transparent) 90deg,color-mix(in srgb,var(--accent2) 40%,transparent) 180deg,transparent 300deg);
+  filter:blur(14px);opacity:.7;animation:gradRotate 8s linear infinite;pointer-events:none;
+}
+
+/* Hero card: animated gradient border via mask */
+.hero::after{
+  content:'';position:absolute;inset:0;border-radius:20px;padding:1px;pointer-events:none;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 55%,transparent),transparent 30%,transparent 70%,color-mix(in srgb,var(--accent2) 55%,transparent));
+  background-size:220% 220%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:gradShift 10s ease infinite;opacity:.6;
+}
+
+/* Streak box: flowing gradient wash */
+.hero-streak{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,transparent),color-mix(in srgb,var(--accent2) 6%,transparent),color-mix(in srgb,var(--accent) 10%,transparent));background-size:200% 200%;animation:gradShift 8s ease infinite;}
+
+/* Logo: soft breathing glow */
+@keyframes logoBreath{0%,100%{filter:drop-shadow(0 0 2px rgba(255,255,255,.25));}50%{filter:drop-shadow(0 0 8px color-mix(in srgb,var(--accent) 80%,white));}}
+.nav-logo{animation:logoBreath 5s ease-in-out infinite;}
+
+/* Active nav underline: animated gradient */
+.ntab.active::after{background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent))!important;background-size:200% auto!important;animation:gradShift 4s linear infinite;}
+
+/* Bottom nav active: flowing tint */
+.bnav button.active{background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent2) 14%,transparent))!important;background-size:200% 200%!important;animation:gradShift 6s ease infinite;}
+
+/* Completed task cards: gentle flowing accent wash */
+.tcard.tc-done .tcard-fg{background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 12%,var(--surface)),color-mix(in srgb,var(--accent2) 7%,var(--surface)),color-mix(in srgb,var(--accent) 12%,var(--surface)));background-size:200% 200%;animation:gradShift 7s ease infinite;}
+
+/* Primary action buttons: flowing gradient */
+.mo-today,.note-save,.ob-cta,.qp-add-btn:hover{background:linear-gradient(120deg,var(--accent),var(--accent2),var(--accent))!important;background-size:200% auto!important;animation:gradShift 5s ease infinite;}
+
+/* Streak flame gets a warm animated glow layer already; add hue drift when hot */
+.flame-anim{animation:flameFlicker 2.4s ease-in-out infinite,hueDrift 6s ease-in-out infinite;}
+
+/* Divider labels flow */
+.today-divider.tdv-ok span,.today-divider.tdv-ng span{background:linear-gradient(90deg,currentColor,color-mix(in srgb,currentColor 55%,transparent),currentColor);background-size:200% auto;-webkit-background-clip:text;background-clip:text;animation:gradShift 5s linear infinite;}
+
 /* Respect reduced motion preference */
 @media(prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}

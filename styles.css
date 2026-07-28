@@ -825,46 +825,34 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 /* Read-only task name in record grid */
 .grid-tname{display:block;padding:0 8px;font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:36px;}
 .grid-tname.del{color:var(--text4);text-decoration:line-through;}
-/* ===== Today (input) tab cards — swipe based ===== */
+/* ===== Today (input) tab cards — tap to toggle ===== */
 .today-list{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
-.today-hint{text-align:center;font-size:11.5px;color:var(--text4);font-weight:600;margin-bottom:4px;letter-spacing:.3px;}
-.tcard{position:relative;border-radius:16px;overflow:hidden;transition:transform .3s cubic-bezier(.22,1,.36,1),opacity .3s,max-height .4s,margin .3s;max-height:80px;}
-.tcard-swipe{position:relative;}
-.tcard-bg{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;width:50%;color:#fff;opacity:0;transition:opacity .15s;}
-.tcard-bg-ok{left:0;justify-content:flex-start;padding-left:24px;background:linear-gradient(90deg,var(--accent),transparent);}
-.tcard-bg-ng{right:0;justify-content:flex-end;padding-right:24px;background:linear-gradient(270deg,var(--mZ),transparent);}
-.tcard.swiping-ok .tcard-bg-ok{opacity:1;}
-.tcard.swiping-ng .tcard-bg-ng{opacity:1;}
-.tcard-fg{position:relative;display:flex;align-items:center;gap:14px;padding:18px 12px 18px 20px;background:var(--surface);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:16px;cursor:grab;touch-action:pan-y;will-change:transform;}
-.tcard-fg:active{cursor:grabbing;}
-.tcard-state{width:30px;height:30px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;transition:all .2s;}
+.tcard{position:relative;display:flex;align-items:center;border-radius:16px;border:1px solid var(--border);background:var(--surface);backdrop-filter:blur(12px);overflow:hidden;transition:border-color .2s,background .2s,transform .12s;}
+.tcard:active{transform:scale(.995);}
+.tcard-hit{flex:1;display:flex;align-items:center;gap:14px;padding:18px 8px 18px 20px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;min-width:0;}
+.tcard-state{width:30px;height:30px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;transition:all .25s cubic-bezier(.34,1.56,.64,1);}
 .tcard-name{flex:1;font-size:16px;font-weight:600;color:var(--text);min-width:0;background:none;border:none;font-family:inherit;padding:2px 4px;border-radius:6px;outline:none;text-overflow:ellipsis;pointer-events:none;}
 .tcard-name:not([readonly]){background:var(--naBg);box-shadow:0 0 0 2px var(--accent);pointer-events:auto;}
-.tcard-tools{display:flex;align-items:center;gap:2px;}
+.tcard-tools{display:flex;align-items:center;gap:2px;padding-right:10px;}
 .tcard-edit,.tcard-del{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--text4);cursor:pointer;transition:all .15s;}
 .tcard-edit:hover{color:var(--accent);background:var(--accentLight);}
 .tcard-del:hover{color:var(--red);background:var(--mZb);}
-/* 成功 */
-.tcard.tc-done .tcard-fg{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 8%,var(--surface));}
-.tcard.tc-done .tcard-name{color:var(--text3);}
-.tcard.tc-done .tcard-state{background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 14px color-mix(in srgb,var(--accent) 45%,transparent);}
-/* 失敗 */
-.tcard.tc-fail .tcard-fg{border-color:color-mix(in srgb,var(--mZ) 40%,transparent);background:color-mix(in srgb,var(--mZ) 7%,var(--surface));}
+/* 達成(既定) */
+.tcard.tc-done{border-color:color-mix(in srgb,var(--accent) 42%,transparent);}
+.tcard.tc-done .tcard-state{background:linear-gradient(120deg,var(--accent),var(--accent2),var(--accent));background-size:200% auto;animation:gradShift 6s ease infinite;box-shadow:0 0 14px color-mix(in srgb,var(--accent) 45%,transparent);}
+/* 未達 */
+.tcard.tc-fail{border-color:color-mix(in srgb,var(--mZ) 38%,transparent);background:color-mix(in srgb,var(--mZ) 6%,var(--surface));}
 .tcard.tc-fail .tcard-name{color:var(--text3);text-decoration:line-through;text-decoration-color:var(--text4);}
-.tcard.tc-fail .tcard-state{background:var(--mZ);box-shadow:0 0 12px color-mix(in srgb,var(--mZ) 40%,transparent);}
-/* フラッシュ演出 */
-.tcard.flash-ok .tcard-state{animation:checkPop .4s cubic-bezier(.34,1.56,.64,1);}
-.tcard.flash-ng .tcard-state{animation:checkPop .4s cubic-bezier(.34,1.56,.64,1);}
+.tcard.tc-fail .tcard-state{background:var(--mZ);box-shadow:0 0 12px color-mix(in srgb,var(--mZ) 35%,transparent);}
+/* 切替時のフラッシュ */
+.tcard.flash .tcard-state{animation:checkPop .42s cubic-bezier(.34,1.56,.64,1);}
 @keyframes checkPop{0%{transform:scale(.5) rotate(-12deg);}60%{transform:scale(1.25) rotate(4deg);}100%{transform:scale(1) rotate(0);}}
-/* セクション移動アニメ */
-.tcard.leaving-right{opacity:0;transform:translateX(40px) scale(.96);max-height:0;margin-top:-10px;}
-.tcard.leaving-left{opacity:0;transform:translateX(-40px) scale(.96);max-height:0;margin-top:-10px;}
-/* 区切り */
-.today-divider{display:flex;align-items:center;gap:10px;margin:14px 2px 4px;color:var(--text4);font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;}
-.today-divider::before,.today-divider::after{content:'';flex:1;height:1px;background:var(--border);}
-.today-divider.tdv-ok span{color:var(--accent);}
-.today-divider.tdv-ng span{color:var(--mZ);}
-.today-alldone{text-align:center;color:var(--accent);font-size:14px;font-weight:700;padding:20px 0;}
+/* 集計 */
+.today-summary{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;font-size:12px;font-weight:800;letter-spacing:.5px;}
+.ts-ok{color:var(--accent);}
+.ts-sep{width:1px;height:12px;background:var(--border2);}
+.ts-ng{color:var(--text4);}
+.ts-ng.on{color:var(--mZ);}
 .today-empty{text-align:center;color:var(--text3);font-size:14px;padding:30px 0;}
 .today-add{display:flex;gap:8px;margin-top:16px;}
 /* ============================================================
@@ -913,8 +901,6 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 /* Bottom nav active: flowing tint */
 .bnav button.active{background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent2) 14%,transparent))!important;background-size:200% 200%!important;animation:gradShift 6s ease infinite;}
 
-/* Completed task cards: gentle flowing accent wash */
-.tcard.tc-done .tcard-fg{background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 12%,var(--surface)),color-mix(in srgb,var(--accent2) 7%,var(--surface)),color-mix(in srgb,var(--accent) 12%,var(--surface)));background-size:200% 200%;animation:gradShift 7s ease infinite;}
 
 /* Primary action buttons: flowing gradient */
 .mo-today,.note-save,.ob-cta,.qp-add-btn:hover{background:linear-gradient(120deg,var(--accent),var(--accent2),var(--accent))!important;background-size:200% auto!important;animation:gradShift 5s ease infinite;}
@@ -922,8 +908,6 @@ body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;o
 /* Streak flame gets a warm animated glow layer already; add hue drift when hot */
 .flame-anim{animation:flameFlicker 2.4s ease-in-out infinite,hueDrift 6s ease-in-out infinite;}
 
-/* Divider labels flow */
-.today-divider.tdv-ok span,.today-divider.tdv-ng span{background:linear-gradient(90deg,currentColor,color-mix(in srgb,currentColor 55%,transparent),currentColor);background-size:200% auto;-webkit-background-clip:text;background-clip:text;animation:gradShift 5s linear infinite;}
 
 /* Respect reduced motion preference */
 @media(prefers-reduced-motion:reduce){

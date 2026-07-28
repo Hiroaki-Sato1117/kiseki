@@ -186,12 +186,18 @@ function hasMarks(data){
   if(!data||typeof data!=='object')return false;
   return Object.values(data).some(md=>md&&md.marks&&Object.keys(md.marks).length>0);
 }
+// 保存データとして有効か(暗黙○のみでマークが空でも、タスク定義があれば有効)
+function hasData(data){
+  if(!data||typeof data!=='object')return false;
+  if(hasMarks(data))return true;
+  return Object.values(data).some(md=>md&&Array.isArray(md.tasks)&&md.tasks.length>0);
+}
 function save(system){
   const json=JSON.stringify(D);
   // localStorage backup with rotation
   try{
     const old=localStorage.getItem('dt8');
-    if(old&&hasMarks(JSON.parse(old)))localStorage.setItem('dt8_bak',old);
+    if(old&&hasData(JSON.parse(old)))localStorage.setItem('dt8_bak',old);
     localStorage.setItem('dt8',json);
   }catch(e){}
   // IndexedDB primary
@@ -206,17 +212,17 @@ async function load(){
   // Try IndexedDB first
   try{
     const idbData=await loadIDB();
-    if(idbData&&hasMarks(idbData)){D=idbData;return;}
+    if(idbData&&hasData(idbData)){D=idbData;return;}
   }catch(e){console.error('IDB load error',e);}
   // Fallback: localStorage
   try{
     const s=localStorage.getItem('dt8');
-    if(s){const parsed=JSON.parse(s);if(hasMarks(parsed)){D=parsed;return;};}
+    if(s){const parsed=JSON.parse(s);if(hasData(parsed)){D=parsed;return;};}
   }catch(e){}
   // Last resort: localStorage backup
   try{
     const bak=localStorage.getItem('dt8_bak');
-    if(bak){const parsed=JSON.parse(bak);if(hasMarks(parsed)){D=parsed;console.warn('Restored from backup');return;}}
+    if(bak){const parsed=JSON.parse(bak);if(hasData(parsed)){D=parsed;console.warn('Restored from backup');return;}}
   }catch(e){}
   // If nothing found, try localStorage even without marks (fresh start)
   try{
@@ -282,7 +288,7 @@ function cloudPush(){
   if(!window.CLOUD||!CLOUD.enabled||!CLOUD.user)return;
   CLOUD.save(JSON.stringify(D),dataUpdatedAt).then(()=>setSync('ok')).catch(e=>{console.error('cloud push',e);setSync('err');});
 }
-function adoptRemote(remote){
+function adoptRemote(remote){_autoFromNum=null;_scanCache=null;
   try{
     const parsed=JSON.parse(remote.data);
     if(!parsed||typeof parsed!=='object')return;
@@ -493,7 +499,45 @@ function syncToFuture(k,action,opts){
 // ============================================================
 // Marks & undo/redo
 // ============================================================
-function gMk(k,ti,d){const md=D[k];if(!md?.marks?.[ti])return null;return md.marks[ti][d]||null;}
+// ============================================================
+// 記録モデル: 5:00に全タスクが仮で○にセットされ、その日のうちに
+// 外した(×にした)ものだけが×として残り、翌4:59で確定する。
+// 実データに書き込むのではなく「記録が無い日=○」と解釈することで、
+// アプリを開いたかどうかに関わらずルールが成立する。
+// __autoFrom(このルールの適用開始日)より前の履歴は従来どおり。
+// ============================================================
+let _autoFromNum=null,_todayNum=null,_todayStamp='';
+const _kNumCache={};
+function kNum(k){let v=_kNumCache[k];if(v===undefined){const[y,m]=pK(k);v=y*10000+m*100;_kNumCache[k]=v;}return v;}
+function autoFromNum(){
+  if(_autoFromNum!==null)return _autoFromNum;
+  let af=D.__autoFrom;
+  if(!af){
+    const t=logicalToday();
+    af=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    D.__autoFrom=af;
+    try{save(true);}catch(e){}
+  }
+  const[y,m,d]=af.split('-').map(Number);
+  _autoFromNum=y*10000+m*100+d;
+  return _autoFromNum;
+}
+function todayNum(){
+  const t=logicalToday();const s=t.toDateString();
+  if(_todayStamp!==s){_todayStamp=s;_todayNum=t.getFullYear()*10000+(t.getMonth()+1)*100+t.getDate();}
+  return _todayNum;
+}
+function gMk(k,ti,d){
+  const md=D[k];
+  const raw=md&&md.marks&&md.marks[ti]?(md.marks[ti][d]||null):null;
+  if(raw)return raw;
+  if(!md)return null;
+  const n=kNum(k)+d;
+  if(n<autoFromNum()||n>todayNum())return null; // 適用開始前・未来は空のまま
+  const t=md.tasks&&md.tasks[ti];
+  if(!t||isDeleted(t)||!isA(t,d))return null;
+  return 'single'; // 未記録=達成とみなす
+}
 const undoStack=[],redoStack=[];
 let lastMarkCell=null;
 function sMk(k,ti,d,t,noHist){const md=D[k];if(!md.marks)md.marks={};if(!md.marks[ti])md.marks[ti]={};const old=md.marks[ti][d]||null;if(!noHist){undoStack.push({k,ti,d,old,nw:t});redoStack.length=0;}if(t===null)delete md.marks[ti][d];else md.marks[ti][d]=t;if(t)lastMarkCell={k,ti,d,t:Date.now()};save();}
@@ -723,6 +767,7 @@ function sortedTasks(md){
 function rToday(){
 const k=K(logicalNow().getFullYear(),logicalNow().getMonth()+1);
 if(!D[k])iM(k);
+_scanCache=null;   // 自動確定を反映するためストリーク再計算
 const md=D[k],[y,m]=pK(k),stats=gS(k),tod=gTod(k),str=scanStreaks().current;
 const wd=weekDiff(k);
 let h='';
@@ -769,46 +814,36 @@ h+=`<div class="hero">
 </div>`;
 
 
-// 当日タスクの入力カード(未完了=上、完了=中、失敗=下)
-// 入力: 右スワイプ=○成功 / 左スワイプ=×失敗
+// 当日タスクの入力カード
+// 5時の日付変更時点で全タスクが○に確定済み。できなかったものをタップで×にする。
 h+=`<div class="today-list" id="todayList">`;
-let pend=0,doneCount=0,failCount=0;
-let pendHtml='',doneHtml='',failHtml='';
+let okCount=0,ngCount=0,rowsN=0;
 md.tasks.forEach((task,ti)=>{
   if(isDeleted(task)||!isA(task,tod.day))return;
   const cm=gMk(k,ti,tod.day);
   if(cm==='skip')return;
-  const isDone=cm!==null&&cm!=='zero';
+  rowsN++;
   const isFail=cm==='zero';
-  const state=isDone?'done':(isFail?'fail':'pend');
-  const cardEditable=`<span class="tcard-tools"><span class="tcard-edit" onclick="event.stopPropagation();todayEdit('${k}',${ti})" title="名前を変更"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><span class="tcard-del" onclick="event.stopPropagation();todayDel('${k}',${ti})" title="削除"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span></span>`;
-  const stateIcon=isDone
-    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
-    : (isFail
-      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-      : '');
-  const row=`<div class="tcard tc-${state}" data-ti="${ti}" data-k="${k}" data-d="${tod.day}">
-    <div class="tcard-swipe">
-      <span class="tcard-bg tcard-bg-ok"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
-      <span class="tcard-bg tcard-bg-ng"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
-      <div class="tcard-fg">
-        <span class="tcard-state">${stateIcon}</span>
-        <input class="tcard-name" value="${esc(task.name)}" data-ti="${ti}" readonly spellcheck="false" onchange="eTinput('${k}',${ti},this)" onblur="this.setAttribute('readonly','')">
-        ${cardEditable}
-      </div>
-    </div>
+  if(isFail)ngCount++;else okCount++;
+  const state=isFail?'fail':'done';
+  const stateIcon=isFail
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+  h+=`<div class="tcard tc-${state}" data-ti="${ti}" data-k="${k}" data-d="${tod.day}">
+    <button class="tcard-hit" onclick="todayToggle('${k}',${ti},${tod.day})" aria-label="${esc(task.name)} を切り替え">
+      <span class="tcard-state">${stateIcon}</span>
+      <input class="tcard-name" value="${esc(task.name)}" data-ti="${ti}" readonly spellcheck="false" onchange="eTinput('${k}',${ti},this)" onblur="this.setAttribute('readonly','')">
+    </button>
+    <span class="tcard-tools">
+      <span class="tcard-edit" onclick="event.stopPropagation();todayEdit('${k}',${ti})" title="名前を変更"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+      <span class="tcard-del" onclick="event.stopPropagation();todayDel('${k}',${ti})" title="削除"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span>
+    </span>
   </div>`;
-  if(isDone){doneCount++;doneHtml+=row;}
-  else if(isFail){failCount++;failHtml+=row;}
-  else{pend++;pendHtml+=row;}
 });
-if(pend===0&&doneCount===0&&failCount===0)h+=`<div class="today-empty">今日のタスクがありません。下から追加できます</div>`;
+h+=`</div>`;
+if(rowsN===0)h+=`<div class="today-empty">今日のタスクがありません。下から追加できます</div>`;
 else{
-  if(pend>0)h+=`<div class="today-hint">→ 右スワイプで成功 ○　←　左スワイプで失敗 ×</div>`;
-  h+=pendHtml;
-  if(pend===0)h+=`<div class="today-alldone">今日のタスクは全て記録しました 🎉</div>`;
-  if(doneCount>0)h+=`<div class="today-divider tdv-ok"><span>完了 ${doneCount}</span></div>`+doneHtml;
-  if(failCount>0)h+=`<div class="today-divider tdv-ng"><span>失敗 ${failCount}</span></div>`+failHtml;
+  h+=`<div class="today-summary"><span class="ts-ok">達成 ${okCount}</span><span class="ts-sep"></span><span class="ts-ng${ngCount?' on':''}">未達 ${ngCount}</span></div>`;
 }
 h+=`</div>`;
 // タスク追加
@@ -838,7 +873,6 @@ mvEl.className='mv active';
 mvEl.innerHTML=h;
 requestAnimationFrame(()=>{
   drCh&&0; // noop
-  setupSwipeCards();
   if(tod){
     mvEl.querySelectorAll('.anim-v[data-anim]').forEach(e=>{const t=parseFloat(e.dataset.anim)||0;const dl=parseInt(e.dataset.delay)||0;setTimeout(()=>animateNum(e,t,1000),dl);});
     const ring=document.querySelector('.td-ring-prog');
@@ -848,74 +882,38 @@ requestAnimationFrame(()=>{
   setSync(syncState);
 });
 }
-// 入力タブ: マークを設定(right=○ / left=×)。同じ状態なら解除。
-function todaySet(k,ti,d,mark){
+// 入力タブ: ○ ⇔ × をタップで切り替え
+function todayToggle(k,ti,d){
   if(!isInputDay(k,d))return;
   const cur=gMk(k,ti,d);
-  const target=(cur===mark)?null:mark; // 同じ操作の再実行で解除
-  sMk(k,ti,d,target);
-  pS(target==='single'?'single':(target==='zero'?'half':'clear'));
+  const next=(cur==='zero')?'single':'zero'; // ×なら○へ戻す、それ以外は×へ
+  sMk(k,ti,d,next);
+  pS(next==='single'?'single':'half');
   const card=document.querySelector(`.tcard[data-ti="${ti}"][data-k="${k}"]`);
   if(!card){rToday();return;}
+  // その場で状態だけ差し替え(並び替えは起こさない)
+  card.classList.remove('tc-done','tc-fail');
+  card.classList.add(next==='zero'?'tc-fail':'tc-done');
+  card.classList.add('flash');
+  setTimeout(()=>card.classList.remove('flash'),420);
+  const icon=card.querySelector('.tcard-state');
+  if(icon)icon.innerHTML=(next==='zero')
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
   updateHeroToday(k);
-  if(target){
-    // ○or×が付いた → 対応セクションへ移動アニメ
-    card.classList.add(target==='single'?'flash-ok':'flash-ng');
-    setTimeout(()=>{card.classList.add(target==='single'?'leaving-right':'leaving-left');},650);
-    setTimeout(()=>{rToday();},1000);
-  }else{
-    rToday();
-  }
+  updateTodaySummary(k,d);
 }
-// スワイプ操作のセットアップ
-function setupSwipeCards(){
-  document.querySelectorAll('#mV .tcard').forEach(card=>{
-    const fg=card.querySelector('.tcard-fg');if(!fg)return;
-    const k=card.dataset.k,ti=parseInt(card.dataset.ti),d=parseInt(card.dataset.d);
-    let sx=0,sy=0,dx=0,active=false,decided=false,horiz=false;
-    const THRESH=90; // これ以上動かしたら確定
-    const onStart=e=>{
-      const t=e.touches?e.touches[0]:e;
-      sx=t.clientX;sy=t.clientY;dx=0;active=true;decided=false;horiz=false;
-      fg.style.transition='none';
-    };
-    const onMove=e=>{
-      if(!active)return;
-      const t=e.touches?e.touches[0]:e;
-      dx=t.clientX-sx;const dy=t.clientY-sy;
-      if(!decided){
-        if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
-        horiz=Math.abs(dx)>Math.abs(dy);decided=true;
-        if(!horiz){active=false;fg.style.transition='';return;}
-      }
-      if(horiz){
-        if(e.cancelable)e.preventDefault();
-        fg.style.transform=`translateX(${dx}px)`;
-        card.classList.toggle('swiping-ok',dx>30);
-        card.classList.toggle('swiping-ng',dx<-30);
-      }
-    };
-    const onEnd=()=>{
-      if(!active&&!decided){return;}
-      active=false;
-      card.classList.remove('swiping-ok','swiping-ng');
-      fg.style.transition='';
-      if(horiz&&Math.abs(dx)>=THRESH){
-        fg.style.transform='';
-        todaySet(k,ti,d,dx>0?'single':'zero');
-      }else{
-        fg.style.transform='';
-      }
-    };
-    fg.addEventListener('touchstart',onStart,{passive:true});
-    fg.addEventListener('touchmove',onMove,{passive:false});
-    fg.addEventListener('touchend',onEnd);
-    fg.addEventListener('touchcancel',onEnd);
-    // マウス(PC)対応: ドラッグで左右
-    fg.addEventListener('mousedown',e=>{if(e.target.closest('.tcard-tools')||e.target.closest('input:not([readonly])'))return;onStart(e);
-      const mm=ev=>onMove(ev),mu=()=>{onEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
-      document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});
+function updateTodaySummary(k,d){
+  const md=D[k];if(!md)return;
+  let ok=0,ng=0;
+  md.tasks.forEach((t,ti)=>{
+    if(isDeleted(t)||!isA(t,d))return;
+    const m2=gMk(k,ti,d);if(m2==='skip')return;
+    if(m2==='zero')ng++;else ok++;
   });
+  const okEl=document.querySelector('.ts-ok'),ngEl=document.querySelector('.ts-ng');
+  if(okEl)okEl.textContent='達成 '+ok;
+  if(ngEl){ngEl.textContent='未達 '+ng;ngEl.classList.toggle('on',ng>0);}
 }
 function updateHeroToday(k){
   try{
